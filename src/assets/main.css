@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { -webkit-tap-highlight-color: transparent; }
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  :root {
+    --brand: #1a1a2e;
+    --brand-light: #2d2d5e;
+    --accent: #639922;
+    --accent-light: #EAF3DE;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand text-white font-medium rounded-xl py-3 px-6 active:scale-95 transition-transform;
+  }
+  .btn-accent {
+    @apply text-white font-medium rounded-xl py-3 px-6 active:scale-95 transition-transform;
+    background: var(--accent);
+  }
+  .btn-ghost {
+    @apply bg-white border border-gray-200 text-gray-700 font-medium rounded-xl py-3 px-6 active:scale-95 transition-transform;
+  }
+  .card {
+    @apply bg-white rounded-2xl border border-gray-100 shadow-sm;
+  }
+  .input {
+    @apply w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 transition;
+  }
+  .badge {
+    @apply text-xs font-medium px-2 py-0.5 rounded-full;
+  }
+  .bottom-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+}
+
+/* Scrollbar minimaliste */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }
