@@ -96,7 +96,15 @@
           </select>
         </div>
       </div>
-
+      <!-- Lien Exercices -->
+      <router-link to="/exercises" class="w-full card p-4 flex items-center gap-3 hover:bg-gray-50">
+        <span class="text-xl">💪</span>
+        <div class="flex-1">
+          <p class="text-sm font-medium text-gray-900">Bibliothèque d'exercices</p>
+          <p class="text-xs text-gray-400">Voir et gérer mes exercices</p>
+        </div>
+        <span class="text-gray-300">›</span>
+      </router-link>
       <!-- Déconnexion -->
       <button @click="confirmLogout = true"
         class="w-full card p-4 text-red-500 text-sm font-medium text-center">

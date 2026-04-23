@@ -17,7 +17,6 @@ export const useWorkoutsStore = defineStore('workouts', () => {
       .select('*, workout_items(*, exercise:exercises(*))')
       .eq('user_id', auth.user.id)
       .order('created_at', { ascending: false })
-    // Sort items by order client-side (reserved keyword workaround)
     const sorted = (data || []).map(w => ({
       ...w,
       workout_items: (w.workout_items || []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))

@@ -16,11 +16,28 @@
       <div class="card p-4 space-y-3">
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Nom de la séance *</label>
-          <input v-model="form.name" placeholder="ex: Push A, Jambes, Full Body…" class="input" />
+          <input v-model="form.name" placeholder="ex: Push A, Legs, Full Body…" class="input" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Catégorie</label>
+          <div class="grid grid-cols-4 gap-2">
+            <button v-for="cat in categories" :key="cat.value" type="button"
+              @click="form.category = cat.value"
+              class="flex flex-col items-center gap-1 p-2 rounded-xl transition-all"
+              :style="form.category === cat.value
+                ? `background:${cat.bg};border:2px solid ${cat.color}`
+                : 'background:#f9fafb;border:2px solid transparent'">
+              <span class="text-lg">{{ cat.icon }}</span>
+              <span class="text-xs font-medium"
+                :style="form.category === cat.value ? `color:${cat.text}` : 'color:#6b7280'">
+                {{ cat.label }}
+              </span>
+            </button>
+          </div>
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Description (optionnel)</label>
-          <input v-model="form.description" placeholder="ex: ~45 min, force" class="input" />
+          <input v-model="form.description" placeholder="ex: ~45 min, focus force" class="input" />
         </div>
       </div>
 
@@ -44,7 +61,7 @@
             </div>
             <div class="flex-1">
               <p class="text-sm font-medium text-gray-900">{{ item.exercise?.name || 'Exercice' }}</p>
-              <p class="text-xs text-gray-400 mb-2">{{ item.exercise?.muscle_group }}</p>
+              <p class="text-xs text-gray-400 mb-2">{{ item.exercise?.muscle_group }}<span v-if="item.exercise?.equipment"> · {{ item.exercise.equipment }}</span></p>
               <div class="grid grid-cols-4 gap-2">
                 <div>
                   <label class="block text-xs text-gray-400 mb-0.5">Séries</label>
@@ -72,14 +89,14 @@
         <div class="card p-4">
           <h3 class="text-xs font-semibold text-gray-500 mb-2">Ajouter un exercice</h3>
           <input v-model="search" placeholder="Rechercher…" class="input text-sm mb-3" />
-          <div class="space-y-1 max-h-52 overflow-y-auto">
+          <div class="space-y-1 max-h-64 overflow-y-auto">
             <button v-for="ex in filteredExercises" :key="ex.id"
               @click="addExercise(ex)"
               class="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 text-left transition-colors">
               <div class="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center text-sm">💪</div>
-              <div class="flex-1">
-                <p class="text-sm font-medium text-gray-900">{{ ex.name }}</p>
-                <p class="text-xs text-gray-400">{{ ex.muscle_group }}</p>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-900 truncate">{{ ex.name }}</p>
+                <p class="text-xs text-gray-400 truncate">{{ ex.muscle_group }}<span v-if="ex.equipment"> · {{ ex.equipment }}</span></p>
               </div>
               <span class="text-xs text-brand font-medium">+</span>
             </button>
@@ -97,10 +114,14 @@
       <div class="bg-white rounded-3xl p-6 w-full max-w-sm">
         <h3 class="font-semibold text-gray-900 mb-4">Nouvel exercice</h3>
         <div class="space-y-3 mb-5">
-          <input v-model="newEx.name" placeholder="Nom de l'exercice *" class="input" />
+          <input v-model="newEx.name" placeholder="Nom *" class="input" />
           <select v-model="newEx.muscle_group" class="input">
             <option value="">Groupe musculaire</option>
             <option v-for="g in muscleGroups" :key="g">{{ g }}</option>
+          </select>
+          <select v-model="newEx.equipment" class="input">
+            <option value="">Équipement</option>
+            <option v-for="eq in equipmentList" :key="eq">{{ eq }}</option>
           </select>
           <textarea v-model="newEx.notes" placeholder="Notes (optionnel)" rows="2" class="input resize-none" />
         </div>
@@ -118,6 +139,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkoutsStore } from '@/stores/workouts'
 import { useToast } from '@/composables/useToast'
+import { WORKOUT_CATEGORIES } from '@/lib/categories'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 
@@ -132,14 +154,17 @@ const search = ref('')
 const showNewExercise = ref(false)
 let keyCounter = 0
 
-const form = ref({ name: '', description: '', items: [] })
-const newEx = ref({ name: '', muscle_group: '', notes: '' })
-const muscleGroups = ['Pectoraux','Dos','Épaules','Biceps','Triceps','Jambes','Fessiers','Abdominaux','Full Body','Cardio']
+const form = ref({ name: '', description: '', category: 'other', items: [] })
+const newEx = ref({ name: '', muscle_group: '', equipment: '', notes: '' })
+const categories = WORKOUT_CATEGORIES
+const muscleGroups = ['Pectoraux','Dos','Épaules','Biceps','Triceps','Jambes','Fessiers','Abdominaux','Avant-bras','Full Body','Cardio','Mobilité']
+const equipmentList = ['Barre','Haltères','Poulie','Machine','Poids du corps','Kettlebell','Aucun']
 
 const filteredExercises = computed(() =>
   workouts.exercises.filter(e =>
     e.name.toLowerCase().includes(search.value.toLowerCase()) ||
-    (e.muscle_group || '').toLowerCase().includes(search.value.toLowerCase())
+    (e.muscle_group || '').toLowerCase().includes(search.value.toLowerCase()) ||
+    (e.equipment || '').toLowerCase().includes(search.value.toLowerCase())
   )
 )
 
@@ -156,7 +181,7 @@ async function createExercise() {
     const ex = await workouts.createExercise(newEx.value)
     addExercise(ex)
     showNewExercise.value = false
-    newEx.value = { name: '', muscle_group: '', notes: '' }
+    newEx.value = { name: '', muscle_group: '', equipment: '', notes: '' }
   } catch { show('Erreur lors de la création', 'error') }
 }
 
@@ -166,9 +191,9 @@ async function save() {
   try {
     let id = route.params.id
     if (isEdit.value) {
-      await workouts.updateWorkout(id, { name: form.value.name, description: form.value.description })
+      await workouts.updateWorkout(id, { name: form.value.name, description: form.value.description, category: form.value.category })
     } else {
-      const w = await workouts.createWorkout({ name: form.value.name, description: form.value.description })
+      const w = await workouts.createWorkout({ name: form.value.name, description: form.value.description, category: form.value.category })
       id = w.id
     }
     await workouts.saveWorkoutItems(id, form.value.items)
@@ -187,6 +212,7 @@ onMounted(async () => {
     if (w) {
       form.value.name = w.name
       form.value.description = w.description || ''
+      form.value.category = w.category || 'other'
       form.value.items = (w.workout_items || [])
         .sort((a, b) => a.order - b.order)
         .map(item => ({ _key: keyCounter++, ...item }))

@@ -167,6 +167,14 @@ async function finish() {
     }))
     const workoutName = session.workout?.name || 'Séance'
     const result = await session.finishSession()
+    // Marque la séance planifiée comme complétée si elle vient du planning
+    const scheduledId = sessionStorage.getItem('scheduledSessionId')
+    if (scheduledId && result.sessionId) {
+      const { usePlanningStore } = await import('@/stores/planning')
+      const planning = usePlanningStore()
+      try { await planning.markCompleted(scheduledId, result.sessionId) } catch {}
+      sessionStorage.removeItem('scheduledSessionId')
+    }
     router.push({
       name: 'session-summary',
       state: { duration: result.duration, workoutName, setsCount: result.setsCount, sessionId: result.sessionId, completedSets }

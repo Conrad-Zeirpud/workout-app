@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 const routes = [
   { path: '/auth', name: 'auth', component: () => import('@/views/AuthView.vue'), meta: { public: true } },
   { path: '/', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
+  { path: '/planning', name: 'planning', component: () => import('@/views/PlanningView.vue') },
   { path: '/workouts', name: 'workouts', component: () => import('@/views/WorkoutsView.vue') },
   { path: '/workouts/new', name: 'workout-new', component: () => import('@/views/WorkoutBuilderView.vue') },
   { path: '/workouts/:id/edit', name: 'workout-edit', component: () => import('@/views/WorkoutBuilderView.vue') },

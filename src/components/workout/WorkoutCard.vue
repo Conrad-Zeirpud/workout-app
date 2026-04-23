@@ -1,14 +1,16 @@
 <template>
-  <div class="card p-4 flex items-center gap-3">
+  <div class="card p-4 flex items-center gap-3" :style="`border-left: 3px solid ${cat.color}`">
     <div class="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-      :style="`background:${tagColor.bg}`">
-      {{ tagColor.icon }}
+      :style="`background:${cat.bg}`">
+      {{ cat.icon }}
     </div>
     <div class="flex-1 min-w-0">
-      <p class="font-semibold text-gray-900 truncate">{{ workout.name }}</p>
+      <div class="flex items-center gap-2">
+        <p class="font-semibold text-gray-900 truncate">{{ workout.name }}</p>
+      </div>
       <p class="text-xs text-gray-400 mt-0.5">
         {{ workout.workout_items?.length || 0 }} exercices
-        <span v-if="workout.description" class="ml-1">· {{ workout.description }}</span>
+        <span v-if="workout.description"> · {{ workout.description }}</span>
       </p>
     </div>
     <div class="flex gap-2">
@@ -23,12 +25,8 @@
 
 <script setup>
 import { computed } from 'vue'
+import { getCategory } from '@/lib/categories'
 const props = defineProps({ workout: Object })
 defineEmits(['start'])
-const icons = ['💪','🏃','🦵','🏋️','🤸','🧘','🚴','⚡']
-const bgs = ['#E6F1FB','#EAF3DE','#FAEEDA','#EEEDFE','#E1F5EE','#FBEAF0','#FAECE7','#F1EFE8']
-const tagColor = computed(() => {
-  const i = Math.abs(props.workout.name?.charCodeAt(0) || 0) % icons.length
-  return { icon: icons[i], bg: bgs[i] }
-})
+const cat = computed(() => getCategory(props.workout?.category))
 </script>

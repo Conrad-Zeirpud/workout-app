@@ -16,8 +16,8 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 const items = [
   { to: '/', icon: '🏠', label: 'Accueil', exact: true },
+  { to: '/planning', icon: '📅', label: 'Planning' },
   { to: '/workouts', icon: '📋', label: 'Séances' },
-  { to: '/exercises', icon: '💪', label: 'Exercices' },
   { to: '/history', icon: '📈', label: 'Stats' },
   { to: '/profile', icon: '👤', label: 'Profil' }
 ]

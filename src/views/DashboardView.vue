@@ -8,9 +8,8 @@
           <p class="text-white/60 text-sm">Bonjour 👋</p>
           <h1 class="text-white text-xl font-bold">{{ greeting }}</h1>
         </div>
-        <button @click="auth.signOut()" class="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white text-sm">⏏</button>
+        <router-link to="/profile" class="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white text-sm">👤</router-link>
       </div>
-      <!-- Stats rapides -->
       <div class="grid grid-cols-3 gap-3 mt-5">
         <div class="bg-white/10 rounded-2xl p-3 text-center">
           <div class="text-2xl font-bold text-white">{{ stats.weeklyCount }}</div>
@@ -22,19 +21,44 @@
         </div>
         <div class="bg-white/10 rounded-2xl p-3 text-center">
           <div class="text-2xl font-bold text-white">{{ stats.prs.length }}</div>
-          <div class="text-white/60 text-xs mt-0.5">records (PR)</div>
+          <div class="text-white/60 text-xs mt-0.5">records</div>
         </div>
       </div>
     </div>
 
     <div class="px-4 mt-5 space-y-5">
+      <!-- Séance du jour -->
+      <div v-if="todaysSessions.length > 0">
+        <h2 class="text-sm font-semibold text-gray-900 mb-3">🎯 Aujourd'hui</h2>
+        <div class="space-y-2">
+          <div v-for="s in todaysSessions" :key="s.id"
+            class="card p-4 flex items-center gap-3"
+            :style="`border-left: 4px solid ${getCat(s.workout?.category).color}`">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
+              :style="`background:${getCat(s.workout?.category).bg}`">
+              {{ getCat(s.workout?.category).icon }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-gray-900">{{ s.workout?.name }}</p>
+              <WorkoutCategoryBadge :category="s.workout?.category" />
+            </div>
+            <button v-if="!s.completed" @click="launchScheduled(s)"
+              class="btn-accent text-sm py-2 px-4">▶ Lancer</button>
+            <span v-else class="text-xs text-green-600 font-medium">✓ Fait</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Calendrier -->
       <div class="card p-4">
-        <h2 class="text-sm font-semibold text-gray-900 mb-3">Calendrier</h2>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-gray-900">Calendrier</h2>
+          <router-link to="/planning" class="text-xs text-brand font-medium">Planifier</router-link>
+        </div>
         <CalendarGrid :data="calendarData" />
       </div>
 
-      <!-- Séances rapides -->
+      <!-- Séances -->
       <div>
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-sm font-semibold text-gray-900">Mes séances</h2>
@@ -76,8 +100,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useWorkoutsStore } from '@/stores/workouts'
 import { useStatsStore } from '@/stores/stats'
 import { useSessionStore } from '@/stores/session'
+import { usePlanningStore } from '@/stores/planning'
+import { getCategory } from '@/lib/categories'
 import CalendarGrid from '@/components/ui/CalendarGrid.vue'
 import WorkoutCard from '@/components/workout/WorkoutCard.vue'
+import WorkoutCategoryBadge from '@/components/ui/WorkoutCategoryBadge.vue'
 import PRBadge from '@/components/ui/PRBadge.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 
@@ -85,7 +112,9 @@ const auth = useAuthStore()
 const workouts = useWorkoutsStore()
 const stats = useStatsStore()
 const session = useSessionStore()
+const planning = usePlanningStore()
 const router = useRouter()
+const getCat = getCategory
 
 const greeting = computed(() => auth.user?.email?.split('@')[0] || 'Athlète')
 const totalDurationLabel = computed(() => {
@@ -97,6 +126,7 @@ const calendarData = computed(() => {
   const now = new Date()
   return stats.getCalendarData(now.getFullYear(), now.getMonth())
 })
+const todaysSessions = computed(() => planning.getTodaysSessions())
 
 function formatDate(iso) {
   if (!iso) return ''
@@ -108,9 +138,22 @@ function startWorkout(w) {
   router.push(`/session/${w.id}`)
 }
 
+function launchScheduled(s) {
+  const w = workouts.workouts.find(w => w.id === s.workout?.id)
+  if (!w) return
+  session.startSession(w)
+  sessionStorage.setItem('scheduledSessionId', s.id)
+  router.push(`/session/${w.id}`)
+}
+
 onMounted(async () => {
   await workouts.fetchWorkouts()
   await stats.fetchSessions()
   await stats.fetchPRs()
+  // Load upcoming schedule (7 days)
+  const today = new Date()
+  const weekAhead = new Date(today); weekAhead.setDate(today.getDate() + 7)
+  const toStr = d => d.toISOString().slice(0, 10)
+  await planning.fetchScheduled(toStr(today), toStr(weekAhead))
 })
 </script>
