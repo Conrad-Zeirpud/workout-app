@@ -58,6 +58,41 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     workouts.value = workouts.value.filter(w => w.id !== id)
   }
 
+  async function duplicateWorkout(id) {
+    const original = workouts.value.find(w => w.id === id)
+    if (!original) throw new Error('Workout not found')
+    const auth = useAuthStore()
+    const { data: newWorkout, error: err1 } = await supabase
+      .from('workouts')
+      .insert({
+        user_id: auth.user.id,
+        name: `${original.name} (copie)`,
+        description: original.description,
+        category: original.category,
+        wod_mode: original.wod_mode,
+        wod_config: original.wod_config
+      })
+      .select()
+      .single()
+    if (err1) throw err1
+    if (original.workout_items?.length) {
+      const items = original.workout_items.map((item, i) => ({
+        workout_id: newWorkout.id,
+        exercise_id: item.exercise_id,
+        sets: item.sets,
+        reps: item.reps,
+        weight_kg: item.weight_kg,
+        rest_seconds: item.rest_seconds,
+        section: item.section || 'main',
+        order: i
+      }))
+      const { error: err2 } = await supabase.from('workout_items').insert(items)
+      if (err2) throw err2
+    }
+    await fetchWorkouts()
+    return newWorkout
+  }
+
   async function saveWorkoutItems(workoutId, items) {
     await supabase.from('workout_items').delete().eq('workout_id', workoutId)
     if (items.length === 0) return
@@ -68,6 +103,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
       reps: item.reps,
       weight_kg: item.weight_kg || null,
       rest_seconds: item.rest_seconds || 90,
+      section: item.section || 'main',
       order: i
     }))
     const { error } = await supabase.from('workout_items').insert(rows)
@@ -86,5 +122,10 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     return data
   }
 
-  return { workouts, exercises, loading, fetchWorkouts, fetchExercises, createWorkout, updateWorkout, deleteWorkout, saveWorkoutItems, createExercise }
+  return {
+    workouts, exercises, loading,
+    fetchWorkouts, fetchExercises,
+    createWorkout, updateWorkout, deleteWorkout, duplicateWorkout,
+    saveWorkoutItems, createExercise
+  }
 })

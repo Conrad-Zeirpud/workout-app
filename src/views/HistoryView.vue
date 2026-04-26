@@ -1,35 +1,38 @@
 <template>
   <div class="pb-24">
-    <PageHeader title="Historique" :subtitle="`${stats.sessions.length} séance(s)`" />
+    <PageHeader title="Statistiques" :subtitle="`${stats.sessions.length} séance(s)`" back />
     <div class="px-4 mt-4 space-y-5">
-      <!-- PRs -->
+      <!-- PRs avec graphique -->
       <div>
         <h2 class="text-sm font-semibold text-gray-900 mb-3">🏆 Mes records (PR)</h2>
-        <div v-if="stats.prs.length === 0" class="card p-5 text-center text-gray-400 text-sm">
+        <div v-if="prsByExercise.length === 0" class="card p-5 text-center text-gray-400 text-sm">
           Aucun record enregistré
         </div>
-        <div v-else class="space-y-2">
-          <div v-for="pr in stats.prs.slice(0, showAllPRs ? undefined : 5)" :key="pr.id"
-            class="card p-3 flex items-center gap-3">
-            <PRBadge />
-            <div class="flex-1">
-              <p class="text-sm font-medium text-gray-900">{{ pr.exercise?.name }}</p>
-              <p class="text-xs text-gray-400">{{ pr.exercise?.muscle_group }}</p>
+        <div v-else class="space-y-3">
+          <div v-for="pr in prsByExercise.slice(0, showAllPRs ? undefined : 5)" :key="pr.exerciseId"
+            class="card p-3">
+            <div class="flex items-center gap-3 mb-2">
+              <PRBadge />
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-gray-900 truncate">{{ pr.name }}</p>
+                <p class="text-xs text-gray-400">{{ pr.muscleGroup }}</p>
+              </div>
+              <div class="text-right">
+                <p class="text-base font-bold text-gray-900">{{ pr.bestWeight }}kg</p>
+                <p class="text-xs text-gray-400">× {{ pr.bestReps }} reps</p>
+              </div>
             </div>
-            <div class="text-right">
-              <p class="text-sm font-bold text-gray-900">{{ pr.weight_kg }}kg</p>
-              <p class="text-xs text-gray-400">× {{ pr.reps_done }} reps</p>
-            </div>
-            <p class="text-xs text-gray-300 ml-2">{{ formatDate(pr.session?.started_at) }}</p>
+            <PRChart :data="pr.history" :id="pr.exerciseId" />
+            <p class="text-xs text-gray-300 text-right mt-1">{{ formatDate(pr.lastDate) }}</p>
           </div>
-          <button v-if="stats.prs.length > 5" @click="showAllPRs = !showAllPRs"
+          <button v-if="prsByExercise.length > 5" @click="showAllPRs = !showAllPRs"
             class="w-full text-center text-xs text-brand font-medium py-2">
-            {{ showAllPRs ? 'Voir moins' : `Voir les ${stats.prs.length - 5} autres` }}
+            {{ showAllPRs ? 'Voir moins' : `Voir les ${prsByExercise.length - 5} autres` }}
           </button>
         </div>
       </div>
 
-      <!-- Progression exercice -->
+      <!-- Progression libre par exercice -->
       <div class="card p-4">
         <h2 class="text-sm font-semibold text-gray-900 mb-3">📈 Progression par exercice</h2>
         <select v-model="selectedExerciseId" @change="loadChart" class="input text-sm mb-4">
@@ -64,7 +67,6 @@
               <span>💪 {{ s.session_sets?.length || 0 }} séries</span>
               <span v-if="hasPR(s)" class="text-yellow-600 font-semibold">🏆 PR</span>
             </div>
-            <!-- Exercices résumés -->
             <div v-if="s.session_sets?.length" class="mt-2 flex flex-wrap gap-1">
               <span v-for="ex in uniqueExercises(s)" :key="ex"
                 class="badge bg-gray-100 text-gray-600">{{ ex }}</span>
@@ -77,11 +79,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useStatsStore } from '@/stores/stats'
 import { useWorkoutsStore } from '@/stores/workouts'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import PRBadge from '@/components/ui/PRBadge.vue'
+import PRChart from '@/components/stats/PRChart.vue'
 import ProgressChart from '@/components/stats/ProgressChart.vue'
 
 const stats = useStatsStore()
@@ -91,6 +94,7 @@ const selectedExerciseId = ref('')
 const chartData = ref([])
 const chartLoading = ref(false)
 const exercises = ref([])
+const exerciseHistories = ref({})  // { exerciseId: [{weight_kg, session: {started_at}}] }
 
 function formatDate(iso) {
   if (!iso) return ''
@@ -110,11 +114,50 @@ function uniqueExercises(session) {
   return names.slice(0, 4)
 }
 
+// Group PRs by exercise + load full history per exercise
+const prsByExercise = computed(() => {
+  const map = {}
+  stats.prs.forEach(pr => {
+    const exId = pr.exercise_id
+    if (!exId) return
+    if (!map[exId] || (pr.weight_kg ?? 0) > (map[exId].bestWeight ?? 0)) {
+      map[exId] = {
+        exerciseId: exId,
+        name: pr.exercise?.name || 'Exercice',
+        muscleGroup: pr.exercise?.muscle_group || '',
+        bestWeight: pr.weight_kg,
+        bestReps: pr.reps_done,
+        lastDate: pr.session?.started_at,
+        history: exerciseHistories.value[exId] || []
+      }
+    }
+  })
+  return Object.values(map).sort((a, b) => new Date(b.lastDate) - new Date(a.lastDate))
+})
+
+async function loadHistoriesForPRs() {
+  // For each PR exercise, load its weight history (max per session)
+  const exIds = [...new Set(stats.prs.map(p => p.exercise_id).filter(Boolean))]
+  for (const exId of exIds) {
+    const raw = await stats.fetchExerciseHistory(exId)
+    // Aggregate: max weight per session
+    const bySession = {}
+    raw.forEach(r => {
+      const key = r.session?.started_at
+      if (!bySession[key] || (r.weight_kg ?? 0) > (bySession[key].weight_kg ?? 0)) {
+        bySession[key] = r
+      }
+    })
+    exerciseHistories.value[exId] = Object.values(bySession).sort((a, b) =>
+      new Date(a.session?.started_at) - new Date(b.session?.started_at)
+    )
+  }
+}
+
 async function loadChart() {
   if (!selectedExerciseId.value) { chartData.value = []; return }
   chartLoading.value = true
   const raw = await stats.fetchExerciseHistory(selectedExerciseId.value)
-  // Max weight per session
   const bySession = {}
   raw.forEach(r => {
     const key = r.session?.started_at
@@ -131,5 +174,6 @@ onMounted(async () => {
   await stats.fetchPRs()
   await workouts.fetchExercises()
   exercises.value = workouts.exercises
+  await loadHistoriesForPRs()
 })
 </script>

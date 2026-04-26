@@ -31,13 +31,34 @@
         </div>
       </div>
 
-      <!-- Activité hebdo (7 dernières semaines) -->
+      <!-- Liens vers sous-pages -->
+      <div class="space-y-2">
+        <router-link to="/history" class="card p-4 flex items-center gap-3">
+          <span class="text-2xl">📈</span>
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-gray-900">Statistiques détaillées</p>
+            <p class="text-xs text-gray-400">Historique, PR, progression par exercice</p>
+          </div>
+          <span class="text-gray-300">›</span>
+        </router-link>
+
+        <router-link to="/exercises" class="card p-4 flex items-center gap-3">
+          <span class="text-2xl">💪</span>
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-gray-900">Bibliothèque d'exercices</p>
+            <p class="text-xs text-gray-400">Voir et gérer mes exercices</p>
+          </div>
+          <span class="text-gray-300">›</span>
+        </router-link>
+      </div>
+
+      <!-- Activité hebdo -->
       <div class="card p-4">
         <h2 class="text-sm font-semibold text-gray-900 mb-4">Activité — 7 dernières semaines</h2>
         <WeeklyBarChart :data="weeklyData" />
       </div>
 
-      <!-- Muscles les plus travaillés -->
+      <!-- Muscles travaillés -->
       <div class="card p-4">
         <h2 class="text-sm font-semibold text-gray-900 mb-3">Muscles les plus travaillés</h2>
         <div v-if="muscleRanking.length === 0" class="text-gray-400 text-sm text-center py-2">
@@ -96,21 +117,13 @@
           </select>
         </div>
       </div>
-      <!-- Lien Exercices -->
-      <router-link to="/exercises" class="w-full card p-4 flex items-center gap-3 hover:bg-gray-50">
-        <span class="text-xl">💪</span>
-        <div class="flex-1">
-          <p class="text-sm font-medium text-gray-900">Bibliothèque d'exercices</p>
-          <p class="text-xs text-gray-400">Voir et gérer mes exercices</p>
-        </div>
-        <span class="text-gray-300">›</span>
-      </router-link>
+
       <!-- Déconnexion -->
       <button @click="confirmLogout = true"
         class="w-full card p-4 text-red-500 text-sm font-medium text-center">
         Se déconnecter
       </button>
-      <p class="text-center text-xs text-gray-300 pb-2">WorkoutApp v0.1.0</p>
+      <p class="text-center text-xs text-gray-300 pb-2">WorkoutApp v0.3.0</p>
     </div>
 
     <!-- Confirm logout -->
@@ -133,7 +146,6 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useStatsStore } from '@/stores/stats'
-import { useToast } from '@/composables/useToast'
 import { useSettings } from '@/composables/useSettings'
 import WeeklyBarChart from '@/components/stats/WeeklyBarChart.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
@@ -141,7 +153,6 @@ import ToastContainer from '@/components/ui/ToastContainer.vue'
 const auth = useAuthStore()
 const stats = useStatsStore()
 const router = useRouter()
-const { show } = useToast()
 const { settings, save: saveSettings } = useSettings()
 const confirmLogout = ref(false)
 

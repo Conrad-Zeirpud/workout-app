@@ -18,8 +18,12 @@
       <div v-else class="space-y-3">
         <div v-for="w in workouts.workouts" :key="w.id" class="relative">
           <WorkoutCard :workout="w" @start="startWorkout(w)" />
-          <button @click="confirmDelete(w)"
-            class="absolute top-2 right-2 w-6 h-6 flex items-center justify-center text-gray-300 hover:text-red-400 text-xs">✕</button>
+          <div class="absolute top-2 right-2 flex gap-1">
+            <button @click="duplicate(w)" :title="'Dupliquer'"
+              class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-brand text-sm">📋</button>
+            <button @click="confirmDelete(w)" :title="'Supprimer'"
+              class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-400 text-xs">✕</button>
+          </div>
         </div>
       </div>
     </div>
@@ -67,6 +71,15 @@ async function doDelete() {
     show('Séance supprimée')
   } catch { show('Erreur lors de la suppression', 'error') }
   toDelete.value = null
+}
+
+async function duplicate(w) {
+  try {
+    const copy = await workouts.duplicateWorkout(w.id)
+    show(`Copie créée : ${copy.name}`)
+  } catch (e) {
+    show(e.message || 'Erreur lors de la duplication', 'error')
+  }
 }
 
 onMounted(() => workouts.fetchWorkouts())

@@ -18,7 +18,7 @@ const items = [
   { to: '/', icon: '🏠', label: 'Accueil', exact: true },
   { to: '/planning', icon: '📅', label: 'Planning' },
   { to: '/workouts', icon: '📋', label: 'Séances' },
-  { to: '/history', icon: '📈', label: 'Stats' },
+  { to: '/timer', icon: '⏱', label: 'Timer' },
   { to: '/profile', icon: '👤', label: 'Profil' }
 ]
 function isActive(item) {
