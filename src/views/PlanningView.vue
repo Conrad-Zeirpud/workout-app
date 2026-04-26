@@ -1,7 +1,11 @@
 <template>
   <div class="pb-24">
     <ToastContainer />
-    <PageHeader title="Planning" :subtitle="monthLabel" />
+    <PageHeader title="Planning" :subtitle="monthLabel">
+      <template #right>
+        <router-link to="/timer" class="btn-primary text-sm py-2 px-3 flex items-center gap-1">⏱ Timer</router-link>
+      </template>
+    </PageHeader>
 
     <div class="px-4 mt-4 space-y-4">
       <!-- Month navigator -->
@@ -20,13 +24,14 @@
           <div v-for="blank in firstDayOfMonth" :key="'b'+blank" />
           <div v-for="day in daysInMonth" :key="day"
             @click="selectDay(day)"
-            class="relative aspect-square p-1 rounded-lg cursor-pointer transition-colors"
-            :class="dayClass(day)">
-            <div class="text-xs font-medium">{{ day }}</div>
-            <!-- Session dots -->
-            <div class="absolute bottom-1 left-1 right-1 flex gap-0.5 flex-wrap">
-              <span v-for="s in getForDay(day)" :key="s.id"
-                class="w-1.5 h-1.5 rounded-full"
+            class="relative aspect-square rounded-lg cursor-pointer transition-all flex flex-col justify-between p-1.5"
+            :class="cellClass(day)"
+            :style="cellStyle(day)">
+            <div class="text-xs font-medium leading-none" :style="cellTextStyle(day)">{{ day }}</div>
+            <!-- Multiple sessions : stacked mini bars -->
+            <div v-if="getForDay(day).length > 1" class="flex flex-col gap-0.5 mt-auto">
+              <div v-for="s in getForDay(day).slice(0, 3)" :key="s.id"
+                class="h-1 rounded-full"
                 :style="`background:${getCat(s.workout?.category).color};${s.completed ? 'opacity:0.4' : ''}`" />
             </div>
           </div>
@@ -38,7 +43,7 @@
         <p class="text-xs font-semibold text-gray-900 mb-2">Légende</p>
         <div class="flex flex-wrap gap-2">
           <div v-for="cat in categories" :key="cat.value" class="flex items-center gap-1.5 text-xs text-gray-500">
-            <span class="w-2.5 h-2.5 rounded-full" :style="`background:${cat.color}`" />
+            <span class="w-3 h-3 rounded" :style="`background:${cat.bg};border:1px solid ${cat.color}`" />
             {{ cat.label }}
           </div>
         </div>
@@ -76,7 +81,6 @@
         <h3 class="font-semibold text-gray-900 mb-1">{{ formatFullDate(selectedDayDate) }}</h3>
         <p class="text-xs text-gray-400 mb-4">Sessions planifiées ce jour</p>
 
-        <!-- Already scheduled -->
         <div v-if="selectedDaySessions.length > 0" class="space-y-2 mb-4">
           <div v-for="s in selectedDaySessions" :key="s.id"
             class="p-3 rounded-xl flex items-center gap-3"
@@ -95,7 +99,6 @@
           </div>
         </div>
 
-        <!-- Add workout -->
         <p class="text-xs font-semibold text-gray-500 mb-2">Planifier une séance</p>
         <div v-if="workouts.workouts.length === 0" class="text-xs text-gray-400 py-3 text-center">
           Crée d'abord une séance dans l'onglet Séances
@@ -170,14 +173,43 @@ function getForDay(day) {
   return planning.getForDate(new Date(currentYear.value, currentMonth.value, day))
 }
 
-function dayClass(day) {
+function cellClass(day) {
   const isToday = day === now.getDate() && currentMonth.value === now.getMonth() && currentYear.value === now.getFullYear()
-  const hasSession = getForDay(day).length > 0
   return [
-    hasSession ? 'bg-gray-50' : 'hover:bg-gray-50',
-    isToday ? 'ring-2 ring-brand ring-offset-1' : '',
-    selectedDay.value === day ? 'bg-brand/10' : ''
+    isToday ? 'ring-2 ring-offset-1' : '',
+    selectedDay.value === day ? 'ring-2' : '',
   ]
+}
+
+function cellStyle(day) {
+  const sessions = getForDay(day)
+  const isToday = day === now.getDate() && currentMonth.value === now.getMonth() && currentYear.value === now.getFullYear()
+  const isSelected = selectedDay.value === day
+
+  let style = ''
+  if (sessions.length === 1) {
+    // Full color background
+    const cat = getCat(sessions[0].workout?.category)
+    const opacity = sessions[0].completed ? '0.4' : '1'
+    style = `background:${cat.bg};`
+    if (sessions[0].completed) style += 'opacity:0.55;'
+  } else if (sessions.length === 0) {
+    style = 'background:#f9fafb;'
+  }
+  // else: gradient handled below (leave default bg + stacked bars)
+
+  if (isToday) style += '--tw-ring-color:#1a1a2e;'
+  if (isSelected) style += '--tw-ring-color:#378ADD;'
+  return style
+}
+
+function cellTextStyle(day) {
+  const sessions = getForDay(day)
+  if (sessions.length === 1) {
+    const cat = getCat(sessions[0].workout?.category)
+    return `color:${cat.text};font-weight:600;`
+  }
+  return 'color:#374151;'
 }
 
 function selectDay(day) { selectedDay.value = day }
@@ -210,7 +242,7 @@ async function loadMonth() {
 async function addToDay(workout) {
   try {
     await planning.schedule(workout.id, selectedDayDate.value)
-    show(`${workout.name} ajoutée au ${selectedDay.value}`)
+    show(`${workout.name} ajoutée`)
   } catch (e) {
     if (e.code === '23505') show('Déjà planifiée ce jour-là', 'warning')
     else show('Erreur', 'error')
@@ -227,7 +259,6 @@ function launch(s) {
   const w = workouts.workouts.find(w => w.id === s.workout.id)
   if (!w) { show('Séance introuvable', 'error'); return }
   session.startSession(w)
-  // Mémoriser le scheduled_id pour le marquer comme complété à la fin
   sessionStorage.setItem('scheduledSessionId', s.id)
   router.push(`/session/${w.id}`)
 }
@@ -249,6 +280,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.ring-brand { --tw-ring-color: var(--brand); }
-.bg-brand\/10 { background-color: rgba(26, 26, 46, 0.1); }
+.ring-2 { box-shadow: 0 0 0 2px var(--tw-ring-color, #1a1a2e); }
+.ring-offset-1 { box-shadow: 0 0 0 1px #fff, 0 0 0 3px var(--tw-ring-color, #1a1a2e); }
 </style>

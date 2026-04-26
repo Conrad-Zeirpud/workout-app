@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { useSettings } from './useSettings'
+import { handleCountdownTick } from '@/lib/sound'
 
 export function useTimer() {
   const { settings } = useSettings()
@@ -23,10 +24,11 @@ export function useTimer() {
     interval = setInterval(() => {
       if (current.value <= 0) {
         stop()
-        _onFinish()
         return
       }
       current.value--
+      // Beep on 3, 2, 1 and GO at 0
+      handleCountdownTick(current.value, settings)
     }, 1000)
   }
 
@@ -39,31 +41,6 @@ export function useTimer() {
     stop()
     current.value = 0
     max.value = 0
-  }
-
-  function _onFinish() {
-    if (settings.vibration && navigator.vibrate) {
-      navigator.vibrate([200, 100, 200])
-    }
-    if (settings.sound) {
-      _beep()
-    }
-  }
-
-  function _beep() {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.frequency.value = 880
-      osc.type = 'sine'
-      gain.gain.setValueAtTime(0.3, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
-      osc.start()
-      osc.stop(ctx.currentTime + 0.5)
-    } catch { /* AudioContext not available */ }
   }
 
   return { current, max, running, pct, formatted, start, stop, reset }

@@ -15,7 +15,7 @@ import { useRoute } from 'vue-router'
 import BottomNav from '@/components/ui/BottomNav.vue'
 
 const route = useRoute()
-const showNav = computed(() => !['auth', 'session', 'session-summary'].includes(route.name))
+const showNav = computed(() => !['auth', 'session', 'session-summary', 'timer-run'].includes(route.name))
 </script>
 
 <style>
