@@ -4,38 +4,50 @@ import { useSettings } from '@/composables/useSettings'
 import { handleCountdownTick, beepTransition, beepGo, vibrateLong } from '@/lib/sound'
 
 // Modes : 'amrap' | 'emom' | 'fortime' | 'tabata' | 'interval' | null
+// Sequence : array of timer configs, each one is the same mode, separated by rest periods.
+//   ex: [{ totalSeconds: 720 }, { totalSeconds: 300 }] for 2 AMRAPs
+//   `restBetween` = seconds of rest between segments
+
 export const useWodTimerStore = defineStore('wodTimer', () => {
   const mode = ref(null)
-  const config = ref({})        // mode-specific config
+  const sequence = ref([])      // array of segment configs
+  const restBetween = ref(0)    // seconds between segments
+  const segmentIndex = ref(0)
+  const config = ref({})        // current segment config
+
   const running = ref(false)
   const paused = ref(false)
   const finished = ref(false)
 
-  // Time tracking
-  const elapsed = ref(0)        // seconds elapsed since start
-  const phase = ref('idle')     // 'countdown' | 'work' | 'rest' | 'done'
-  const phaseRemaining = ref(0) // seconds left in current phase
+  const elapsed = ref(0)        // elapsed in current segment
+  const phase = ref('idle')     // 'countdown' | 'work' | 'rest' | 'between' | 'done'
+  const phaseRemaining = ref(0)
   const currentRound = ref(0)
   const rounds = ref(0)         // user-incremented for AMRAP
+  const segmentRounds = ref([]) // history of rounds per segment (for AMRAP recap)
+
+  const PREP_SECONDS = 10       // fixed prep countdown
 
   let tickInterval = null
   const { settings } = useSettings()
 
-  // ---- Start / Stop / Pause ----
-  function start(m, cfg) {
+  function start(m, seq, restBtw = 0) {
     stop()
     mode.value = m
-    config.value = { ...cfg }
+    sequence.value = seq
+    restBetween.value = restBtw
+    segmentIndex.value = 0
+    config.value = { ...seq[0] }
     running.value = true
     paused.value = false
     finished.value = false
     elapsed.value = 0
     currentRound.value = 0
     rounds.value = 0
+    segmentRounds.value = []
 
-    // All modes start with a 10s prep countdown
     phase.value = 'countdown'
-    phaseRemaining.value = cfg.prepSeconds ?? 10
+    phaseRemaining.value = PREP_SECONDS
     _startTicking()
   }
 
@@ -62,10 +74,13 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
   function reset() {
     stop()
     mode.value = null
+    sequence.value = []
     config.value = {}
     elapsed.value = 0
     currentRound.value = 0
     rounds.value = 0
+    segmentIndex.value = 0
+    segmentRounds.value = []
   }
 
   function incrementRound() {
@@ -75,7 +90,6 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
     }
   }
 
-  // ---- Core tick loop ----
   function _startTicking() {
     tickInterval = setInterval(() => {
       if (paused.value) return
@@ -84,8 +98,24 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
       if (phase.value === 'countdown') {
         phaseRemaining.value--
         handleCountdownTick(phaseRemaining.value, settings)
+        if (phaseRemaining.value <= 0) _startSegment()
+        return
+      }
+
+      // Between segments (rest)
+      if (phase.value === 'between') {
+        phaseRemaining.value--
+        handleCountdownTick(phaseRemaining.value, settings)
         if (phaseRemaining.value <= 0) {
-          _startMainPhase()
+          // Move to next segment
+          segmentIndex.value++
+          config.value = { ...sequence.value[segmentIndex.value] }
+          // Reset segment-level state but keep total elapsed
+          rounds.value = 0
+          currentRound.value = 0
+          phase.value = 'countdown'
+          phaseRemaining.value = PREP_SECONDS
+          if (settings.sound) beepTransition()
         }
         return
       }
@@ -96,25 +126,28 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
       if (mode.value === 'amrap') {
         phaseRemaining.value--
         handleCountdownTick(phaseRemaining.value, settings)
-        if (phaseRemaining.value <= 0) _finish()
+        if (phaseRemaining.value <= 0) _segmentDone()
       }
       else if (mode.value === 'emom') {
+        const interval = config.value.intervalSeconds || 60
         phaseRemaining.value--
         handleCountdownTick(phaseRemaining.value, settings)
         if (phaseRemaining.value <= 0) {
           currentRound.value++
           if (currentRound.value >= config.value.rounds) {
-            _finish()
+            _segmentDone()
           } else {
-            phaseRemaining.value = 60
+            phaseRemaining.value = interval
             if (settings.sound) beepTransition()
           }
         }
       }
       else if (mode.value === 'fortime') {
-        phaseRemaining.value--  // cap timer (counts down)
-        // For Time: chrono monte (elapsed), mais on a aussi un cap
-        if (config.value.cap && phaseRemaining.value <= 0) _finish()
+        // Chrono monte (elapsed). phaseRemaining = cap restant si cap > 0
+        if (config.value.cap > 0) {
+          phaseRemaining.value--
+          if (phaseRemaining.value <= 0) _segmentDone()
+        }
       }
       else if (mode.value === 'tabata') {
         phaseRemaining.value--
@@ -127,7 +160,7 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
           } else {
             currentRound.value++
             if (currentRound.value >= (config.value.rounds ?? 8)) {
-              _finish()
+              _segmentDone()
             } else {
               phase.value = 'work'
               phaseRemaining.value = config.value.workSeconds ?? 20
@@ -142,7 +175,7 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
         if (phaseRemaining.value <= 0) {
           if (phase.value === 'work') {
             if (currentRound.value + 1 >= config.value.rounds) {
-              _finish()
+              _segmentDone()
             } else {
               phase.value = 'rest'
               phaseRemaining.value = config.value.restSeconds
@@ -159,18 +192,19 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
     }, 1000)
   }
 
-  function _startMainPhase() {
+  function _startSegment() {
     if (mode.value === 'amrap') {
       phase.value = 'work'
       phaseRemaining.value = config.value.totalSeconds
     } else if (mode.value === 'emom') {
       phase.value = 'work'
-      phaseRemaining.value = 60
+      phaseRemaining.value = config.value.intervalSeconds || 60
       currentRound.value = 0
       if (settings.sound) beepTransition()
     } else if (mode.value === 'fortime') {
       phase.value = 'work'
-      phaseRemaining.value = config.value.cap || 99999
+      elapsed.value = 0
+      phaseRemaining.value = config.value.cap > 0 ? config.value.cap : 0
     } else if (mode.value === 'tabata') {
       phase.value = 'work'
       phaseRemaining.value = config.value.workSeconds ?? 20
@@ -182,6 +216,37 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
     }
     if (settings.sound) beepGo()
     if (settings.vibration) vibrateLong()
+  }
+
+  function _segmentDone() {
+    // Save AMRAP rounds for recap
+    if (mode.value === 'amrap') {
+      segmentRounds.value.push(rounds.value)
+    }
+    // Check if there's another segment
+    const hasNext = segmentIndex.value < sequence.value.length - 1
+    if (hasNext && restBetween.value > 0) {
+      phase.value = 'between'
+      phaseRemaining.value = restBetween.value
+      if (settings.sound) beepTransition()
+    } else if (hasNext) {
+      // No rest between, start next segment immediately
+      segmentIndex.value++
+      config.value = { ...sequence.value[segmentIndex.value] }
+      rounds.value = 0
+      currentRound.value = 0
+      phase.value = 'countdown'
+      phaseRemaining.value = PREP_SECONDS
+    } else {
+      _finish()
+    }
+  }
+
+  function finishForTime() {
+    // Manual finish for For Time mode
+    if (mode.value === 'fortime' && phase.value === 'work') {
+      _segmentDone()
+    }
   }
 
   function _finish() {
@@ -196,9 +261,9 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
   // ---- Computed for UI ----
   const phaseLabel = computed(() => {
     if (phase.value === 'countdown') return 'Préparation'
+    if (phase.value === 'between') return 'Récup entre timers'
     if (phase.value === 'work') {
-      if (mode.value === 'tabata') return 'Effort'
-      if (mode.value === 'interval') return 'Effort'
+      if (mode.value === 'tabata' || mode.value === 'interval') return 'Effort'
       return 'En cours'
     }
     if (phase.value === 'rest') return 'Repos'
@@ -208,6 +273,11 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
 
   const totalTimeLabel = computed(() => _formatTime(elapsed.value))
   const phaseTimeLabel = computed(() => _formatTime(phaseRemaining.value))
+  const isMultiSegment = computed(() => sequence.value.length > 1)
+  const segmentLabel = computed(() => {
+    if (!isMultiSegment.value) return ''
+    return `Timer ${segmentIndex.value + 1} / ${sequence.value.length}`
+  })
 
   function _formatTime(sec) {
     if (sec < 0) sec = 0
@@ -217,9 +287,11 @@ export const useWodTimerStore = defineStore('wodTimer', () => {
   }
 
   return {
-    mode, config, running, paused, finished,
-    elapsed, phase, phaseRemaining, currentRound, rounds,
-    phaseLabel, totalTimeLabel, phaseTimeLabel,
-    start, pause, resume, stop, reset, incrementRound
+    mode, config, sequence, segmentIndex, restBetween,
+    running, paused, finished,
+    elapsed, phase, phaseRemaining, currentRound, rounds, segmentRounds,
+    phaseLabel, totalTimeLabel, phaseTimeLabel, isMultiSegment, segmentLabel,
+    PREP_SECONDS,
+    start, pause, resume, stop, reset, incrementRound, finishForTime
   }
 })

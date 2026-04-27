@@ -16,6 +16,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
       .from('workouts')
       .select('*, workout_items(*, exercise:exercises(*))')
       .eq('user_id', auth.user.id)
+      .order('display_order', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
     const sorted = (data || []).map(w => ({
       ...w,
@@ -93,6 +94,16 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     return newWorkout
   }
 
+  async function reorderWorkouts(orderedIds) {
+    // Updates display_order for each workout
+    const updates = orderedIds.map((id, idx) =>
+      supabase.from('workouts').update({ display_order: idx }).eq('id', id)
+    )
+    await Promise.all(updates)
+    // Re-fetch to update local state
+    await fetchWorkouts()
+  }
+
   async function saveWorkoutItems(workoutId, items) {
     await supabase.from('workout_items').delete().eq('workout_id', workoutId)
     if (items.length === 0) return
@@ -125,7 +136,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
   return {
     workouts, exercises, loading,
     fetchWorkouts, fetchExercises,
-    createWorkout, updateWorkout, deleteWorkout, duplicateWorkout,
+    createWorkout, updateWorkout, deleteWorkout, duplicateWorkout, reorderWorkouts,
     saveWorkoutItems, createExercise
   }
 })

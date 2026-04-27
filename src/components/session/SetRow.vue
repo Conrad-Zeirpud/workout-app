@@ -8,37 +8,85 @@
       {{ set.done ? '✓' : set.set_number }}
     </div>
 
-    <!-- Inputs -->
-    <div class="flex-1 grid grid-cols-3 gap-2">
-      <div class="flex flex-col items-center gap-0.5">
-        <label class="text-xs text-gray-400">Reps</label>
-        <input v-model.number="set.reps_done" type="number" min="0" :disabled="set.done"
-          class="w-full text-center border border-gray-200 rounded-lg py-1 text-sm font-semibold disabled:opacity-50 disabled:bg-gray-50 focus:outline-none focus:border-brand"
-          @focus="$event.target.select()" />
-      </div>
-      <div class="flex flex-col items-center gap-0.5">
-        <label class="text-xs text-gray-400">{{ unit }}</label>
-        <input v-model.number="set.weight_kg" type="number" min="0" step="0.5" :disabled="set.done"
-          class="w-full text-center border border-gray-200 rounded-lg py-1 text-sm font-semibold disabled:opacity-50 disabled:bg-gray-50 focus:outline-none focus:border-brand"
-          @focus="$event.target.select()" />
-      </div>
-      <div class="flex flex-col items-center gap-0.5">
-        <label class="text-xs text-gray-400">RPE</label>
-        <select v-model="set.rpe" :disabled="set.done"
-          class="w-full text-center border border-gray-200 rounded-lg py-1 text-xs disabled:opacity-50 disabled:bg-gray-50 focus:outline-none">
-          <option :value="null">—</option>
-          <option v-for="r in [6,7,8,9,10]" :key="r" :value="r">{{ r }}</option>
-        </select>
-      </div>
+    <!-- Inputs adapted to unit -->
+    <div class="flex-1 grid gap-2" :class="gridCols">
+      <!-- Weight + reps (default for muscu) -->
+      <template v-if="unit === 'weight'">
+        <div class="flex flex-col items-center gap-0.5">
+          <label class="text-xs text-gray-400">Reps</label>
+          <input v-model.number="set.reps_done" type="number" min="0" :disabled="set.done"
+            class="w-full text-center border border-gray-200 rounded-lg py-1 text-sm font-semibold disabled:opacity-50 disabled:bg-gray-50 focus:outline-none focus:border-brand"
+            @focus="$event.target.select()" />
+        </div>
+        <div class="flex flex-col items-center gap-0.5">
+          <label class="text-xs text-gray-400">{{ weightUnit }}</label>
+          <input v-model.number="set.weight_kg" type="number" min="0" step="0.5" :disabled="set.done"
+            class="w-full text-center border border-gray-200 rounded-lg py-1 text-sm font-semibold disabled:opacity-50 disabled:bg-gray-50 focus:outline-none focus:border-brand"
+            @focus="$event.target.select()" />
+        </div>
+        <div class="flex flex-col items-center gap-0.5">
+          <label class="text-xs text-gray-400">RPE</label>
+          <select v-model="set.rpe" :disabled="set.done"
+            class="w-full text-center border border-gray-200 rounded-lg py-1 text-xs disabled:opacity-50 disabled:bg-gray-50">
+            <option :value="null">—</option>
+            <option v-for="r in [6,7,8,9,10]" :key="r" :value="r">{{ r }}</option>
+          </select>
+        </div>
+      </template>
+
+      <!-- Reps only -->
+      <template v-else-if="unit === 'reps'">
+        <div class="flex flex-col items-center gap-0.5 col-span-2">
+          <label class="text-xs text-gray-400">Reps effectués</label>
+          <input v-model.number="set.reps_done" type="number" min="0" :disabled="set.done"
+            class="w-full text-center border border-gray-200 rounded-lg py-1 text-sm font-semibold disabled:opacity-50 disabled:bg-gray-50 focus:outline-none focus:border-brand"
+            @focus="$event.target.select()" />
+        </div>
+        <div class="flex flex-col items-center gap-0.5">
+          <label class="text-xs text-gray-400">RPE</label>
+          <select v-model="set.rpe" :disabled="set.done"
+            class="w-full text-center border border-gray-200 rounded-lg py-1 text-xs disabled:opacity-50 disabled:bg-gray-50">
+            <option :value="null">—</option>
+            <option v-for="r in [6,7,8,9,10]" :key="r" :value="r">{{ r }}</option>
+          </select>
+        </div>
+      </template>
+
+      <!-- Calories -->
+      <template v-else-if="unit === 'calories'">
+        <div class="flex flex-col items-center gap-0.5 col-span-3">
+          <label class="text-xs text-gray-400">🔥 Calories</label>
+          <input v-model.number="set.reps_done" type="number" min="0" :disabled="set.done"
+            class="w-full text-center border border-gray-200 rounded-lg py-1 text-sm font-semibold disabled:opacity-50 disabled:bg-gray-50 focus:outline-none focus:border-brand"
+            @focus="$event.target.select()" />
+        </div>
+      </template>
+
+      <!-- Meters -->
+      <template v-else-if="unit === 'meters'">
+        <div class="flex flex-col items-center gap-0.5 col-span-3">
+          <label class="text-xs text-gray-400">🏃 Distance (m)</label>
+          <input v-model.number="set.reps_done" type="number" min="0" step="10" :disabled="set.done"
+            class="w-full text-center border border-gray-200 rounded-lg py-1 text-sm font-semibold disabled:opacity-50 disabled:bg-gray-50 focus:outline-none focus:border-brand"
+            @focus="$event.target.select()" />
+        </div>
+      </template>
+
+      <!-- Seconds (duration) -->
+      <template v-else-if="unit === 'seconds'">
+        <div class="flex flex-col items-center gap-0.5 col-span-3">
+          <label class="text-xs text-gray-400">⏱ Durée (sec)</label>
+          <input v-model.number="set.reps_done" type="number" min="0" step="5" :disabled="set.done"
+            class="w-full text-center border border-gray-200 rounded-lg py-1 text-sm font-semibold disabled:opacity-50 disabled:bg-gray-50 focus:outline-none focus:border-brand"
+            @focus="$event.target.select()" />
+        </div>
+      </template>
     </div>
 
     <!-- Done button -->
     <button v-if="!set.done" @click="$emit('complete', set)"
       class="w-9 h-9 rounded-full flex items-center justify-center text-white text-base flex-shrink-0 active:scale-90 transition-transform"
       style="background:var(--accent)">✓</button>
-
-    <!-- Previous perf hint -->
-    <div v-if="previousBest && !set.done" class="hidden"><!-- hint slot --></div>
   </div>
 </template>
 
@@ -48,9 +96,10 @@ import { useSettings } from '@/composables/useSettings'
 
 const props = defineProps({
   set: Object,
-  previousBest: Object
+  unit: { type: String, default: 'weight' }
 })
 defineEmits(['complete'])
 const { settings } = useSettings()
-const unit = computed(() => settings.unit)
+const weightUnit = computed(() => settings.unit)
+const gridCols = computed(() => 'grid-cols-3')
 </script>

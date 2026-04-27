@@ -3,7 +3,6 @@
     <ToastContainer />
 
     <template v-if="session.active">
-      <!-- Header dark -->
       <div class="px-4 pb-3" :style="`background:${headerColor}; padding-top: max(2.5rem, env(safe-area-inset-top))`">
         <div class="flex items-center justify-between mb-3">
           <button @click="confirmCancel = true" class="text-white/50 text-sm px-2 py-1 rounded-lg hover:bg-white/10">✕</button>
@@ -15,7 +14,6 @@
             <p class="text-white font-mono font-bold text-lg">{{ session.elapsedFormatted }}</p>
           </div>
         </div>
-        <!-- Section progression dots -->
         <div class="flex gap-1 mb-2">
           <div v-if="session.hasWarmup" class="flex-1 h-1 rounded-full"
             :style="`background:${getSectionColor('warmup', sectionState('warmup'))}`" />
@@ -30,7 +28,7 @@
         </div>
       </div>
 
-      <!-- Section banner (special for WOD with timer info) -->
+      <!-- WOD entry banner -->
       <div v-if="session.currentSection === 'wod' && session.workout?.wod_mode"
         class="px-4 py-3 flex items-center gap-3" style="background:#FCEBEB; border-bottom:1px solid #fbcaca">
         <span class="text-xl">{{ wodModeIcon }}</span>
@@ -45,7 +43,7 @@
         </button>
       </div>
 
-      <!-- Section tabs (jump between sections) -->
+      <!-- Section tabs -->
       <div class="flex px-3 py-2 gap-1.5 overflow-x-auto bg-white border-b border-gray-100 flex-shrink-0">
         <button v-if="session.hasWarmup"
           @click="session.jumpToSection('warmup')"
@@ -64,7 +62,6 @@
           :style="session.currentSection === 'wod' ? 'background:#E24B4A' : ''">🏁 WOD</button>
       </div>
 
-      <!-- Exercise tab strip -->
       <div class="flex px-3 pt-2 gap-1 overflow-x-auto pb-2 bg-white border-b border-gray-100 flex-shrink-0">
         <button v-for="(item, i) in session.orderedItems" :key="item.id"
           @click="session.currentExerciseIndex = i"
@@ -74,21 +71,19 @@
             : allSetsDone(item) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'"
           :style="i === session.currentExerciseIndex ? `background:${currentSectionColor}` : ''">
           <span v-if="allSetsDone(item) && i !== session.currentExerciseIndex">✓</span>
-          {{ item.exercise?.name || `Ex. ${i+1}` }}
+          {{ item.exercise?.name || `Ex.` }}
         </button>
       </div>
 
-      <!-- Current exercise -->
       <div v-if="session.currentExercise" class="flex-1 overflow-y-auto px-4 py-4 pb-32">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-            :style="`background:${currentSectionBg}`">💪</div>
+            :style="`background:${currentSectionBg}`">{{ unitInfo(session.currentExercise).icon }}</div>
           <div class="flex-1">
             <h2 class="text-lg font-bold text-gray-900">{{ session.currentExercise.exercise?.name }}</h2>
             <div class="flex items-center gap-2 flex-wrap mt-0.5">
               <span class="badge bg-gray-100 text-gray-500 text-xs">{{ session.currentExercise.exercise?.muscle_group }}</span>
-              <span class="text-xs text-gray-400">{{ session.currentExercise.sets }} × {{ session.currentExercise.reps }} reps</span>
-              <span v-if="session.currentSection !== 'wod'" class="text-xs text-gray-400">· repos {{ session.currentExercise.rest_seconds }}s</span>
+              <span class="text-xs text-gray-400">{{ describePrescription(session.currentExercise) }}</span>
             </div>
           </div>
         </div>
@@ -96,7 +91,7 @@
         <div v-if="previousBest" class="mb-3 px-3 py-2 bg-blue-50 rounded-xl flex items-center gap-2">
           <span class="text-blue-400 text-sm">📊</span>
           <p class="text-xs text-blue-700">
-            Dernière fois : <strong>{{ previousBest.weight_kg }}kg × {{ previousBest.reps_done }} reps</strong>
+            Dernière fois : <strong>{{ describePrevious(previousBest) }}</strong>
           </p>
         </div>
 
@@ -105,12 +100,12 @@
             v-for="set in currentSets"
             :key="set.set_number"
             :set="set"
+            :unit="session.currentExercise.exercise?.unit || 'weight'"
             @complete="handleCompleteSet"
           />
         </div>
       </div>
 
-      <!-- Bottom controls -->
       <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3"
         style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom))">
         <div class="flex gap-3">
@@ -133,10 +128,9 @@
     </template>
 
     <div v-else class="flex-1 flex items-center justify-center text-gray-400">
-      <p class="text-sm">Chargement de la séance…</p>
+      <p class="text-sm">Chargement…</p>
     </div>
 
-    <!-- Cancel confirm -->
     <div v-if="confirmCancel" class="fixed inset-0 bg-black/40 z-50 flex items-end justify-center px-4 pb-8"
       @click.self="confirmCancel = false">
       <div class="bg-white rounded-3xl p-6 w-full max-w-sm">
@@ -159,6 +153,7 @@ import { useWorkoutsStore } from '@/stores/workouts'
 import { useStatsStore } from '@/stores/stats'
 import { useWodTimerStore } from '@/stores/wodTimer'
 import { useToast } from '@/composables/useToast'
+import { describePrescription, getUnit } from '@/lib/units'
 import RestTimerOverlay from '@/components/session/RestTimerOverlay.vue'
 import SetRow from '@/components/session/SetRow.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
@@ -213,12 +208,33 @@ const wodConfigLabel = computed(() => {
   const m = session.workout?.wod_mode
   const c = session.workout?.wod_config || {}
   if (m === 'amrap') return `${Math.floor(c.totalSeconds / 60)} min`
-  if (m === 'emom') return `${c.rounds} × 1 min`
-  if (m === 'fortime') return c.cap > 0 ? `Cap ${Math.floor(c.cap / 60)} min` : 'Pas de cap'
+  if (m === 'emom') return `${c.rounds} rounds × ${formatInterval(c.intervalSeconds || 60)}`
+  if (m === 'fortime') return c.cap > 0 ? `Cap ${Math.floor(c.cap / 60)} min` : 'Sans limite'
   if (m === 'tabata' || m === 'interval')
     return `${c.workSeconds}s / ${c.restSeconds}s × ${c.rounds}`
   return ''
 })
+
+function formatInterval(sec) {
+  if (sec < 60) return `${sec}s`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (s === 0) return `${m} min`
+  return `${m}min${s}s`
+}
+
+function unitInfo(item) { return getUnit(item.exercise?.unit) }
+
+function describePrevious(prev) {
+  if (!prev) return ''
+  const u = session.currentExercise?.exercise?.unit || 'weight'
+  if (u === 'weight') return `${prev.weight_kg}kg × ${prev.reps_done} reps`
+  if (u === 'reps') return `${prev.reps_done} reps`
+  if (u === 'calories') return `${prev.reps_done} cal`
+  if (u === 'meters') return `${prev.reps_done}m`
+  if (u === 'seconds') return `${prev.reps_done}s`
+  return `${prev.reps_done}`
+}
 
 function sectionState(section) {
   const items = session.orderedItems.filter(i => (i.section || 'main') === section)
@@ -226,7 +242,6 @@ function sectionState(section) {
   const allDone = items.every(i => allSetsDone(i))
   if (allDone) return 'done'
   if (section === session.currentSection) return 'current'
-  // Vérifier si on est passé dessus
   const sectionOrder = { warmup: 0, main: 1, wod: 2 }
   if (sectionOrder[section] < sectionOrder[session.currentSection]) return 'done'
   return 'pending'
@@ -245,7 +260,7 @@ function allSetsDone(item) {
 
 function launchWodTimer() {
   if (!session.workout?.wod_mode || !session.workout?.wod_config) return
-  wod.start(session.workout.wod_mode, session.workout.wod_config)
+  wod.start(session.workout.wod_mode, [session.workout.wod_config], 0)
   router.push('/timer/run')
 }
 
@@ -255,9 +270,7 @@ async function loadPreviousBest() {
   previousBest.value = history.length > 0 ? history[history.length - 1] : null
 }
 
-function handleCompleteSet(set) {
-  session.completeSet(set)
-}
+function handleCompleteSet(set) { session.completeSet(set) }
 
 async function finish() {
   finishing.value = true

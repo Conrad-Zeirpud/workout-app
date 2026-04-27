@@ -1,34 +1,36 @@
 <template>
   <div class="min-h-screen flex flex-col" :style="`background:${bgColor}`">
-    <!-- Header -->
     <div class="flex items-center justify-between px-4 pt-12 pb-4">
       <button @click="confirmStop = true" class="text-white/70 text-sm px-2 py-1">✕ Quitter</button>
-      <p class="text-white font-semibold uppercase text-sm tracking-wide">{{ modeLabel }}</p>
+      <div class="text-center flex-1">
+        <p class="text-white font-semibold uppercase text-sm tracking-wide">{{ modeLabel }}</p>
+        <p v-if="wod.isMultiSegment" class="text-white/50 text-xs mt-0.5">{{ wod.segmentLabel }}</p>
+      </div>
       <button @click="togglePause" class="text-white/70 text-sm px-2 py-1">
         {{ wod.paused ? '▶' : '⏸' }}
       </button>
     </div>
 
-    <!-- Main content -->
     <div class="flex-1 flex flex-col items-center justify-center px-6 text-center">
-      <!-- Phase label -->
       <p class="text-white/60 text-lg font-medium uppercase tracking-widest mb-6">
         {{ wod.phaseLabel }}
       </p>
 
-      <!-- Main number -->
-      <div class="text-white font-bold font-mono leading-none mb-8"
-        style="font-size:8rem; letter-spacing:-4px;">
-        {{ wod.phaseTimeLabel }}
+      <!-- Big chrono in GREEN -->
+      <div class="font-bold font-mono leading-none mb-8"
+        :style="`font-size:8rem; letter-spacing:-4px; color:${chronoColor}`">
+        {{ mainTime }}
       </div>
 
-      <!-- Secondary info -->
       <div v-if="wod.phase === 'countdown'" class="text-white/70 text-xl font-medium">
         Préparez-vous…
       </div>
 
+      <div v-else-if="wod.phase === 'between'" class="text-white/70 text-base">
+        Repos avant le timer suivant
+      </div>
+
       <div v-else-if="wod.mode === 'amrap'" class="flex flex-col items-center gap-4">
-        <div class="text-white/70 text-sm">Temps total : {{ wod.totalTimeLabel }}</div>
         <div class="text-white text-5xl font-bold">{{ wod.rounds }}</div>
         <div class="text-white/70 text-sm">Rounds</div>
         <button @click="wod.incrementRound()"
@@ -39,14 +41,17 @@
 
       <div v-else-if="wod.mode === 'emom'" class="text-center">
         <div class="text-white text-4xl font-bold">{{ wod.currentRound + 1 }} / {{ wod.config.rounds }}</div>
-        <div class="text-white/70 text-sm mt-1">Minutes</div>
+        <div class="text-white/70 text-sm mt-1">Round</div>
+        <div class="text-white/50 text-xs mt-2">Intervalle : {{ formatInterval(wod.config.intervalSeconds) }}</div>
       </div>
 
-      <div v-else-if="wod.mode === 'fortime'" class="text-center">
-        <div class="text-white text-2xl font-bold">Chrono : {{ wod.totalTimeLabel }}</div>
-        <div v-if="wod.config.cap" class="text-white/70 text-sm mt-1">Cap : {{ formatCap(wod.config.cap) }}</div>
-        <button @click="finishForTime"
-          class="bg-white text-gray-900 rounded-xl px-8 py-3 font-semibold mt-6 active:scale-95 transition-transform">
+      <div v-else-if="wod.mode === 'fortime' && wod.phase === 'work'" class="text-center">
+        <div v-if="wod.config.cap > 0" class="text-white/70 text-sm mb-3">
+          Cap : {{ formatTime(wod.config.cap) }} (reste {{ formatTime(wod.phaseRemaining) }})
+        </div>
+        <div v-else class="text-white/70 text-sm mb-3">Sans limite</div>
+        <button @click="wod.finishForTime()"
+          class="bg-white text-gray-900 rounded-xl px-8 py-3 font-semibold mt-2 active:scale-95 transition-transform">
           🏁 Stop
         </button>
       </div>
@@ -54,16 +59,18 @@
       <div v-else-if="wod.mode === 'tabata' || wod.mode === 'interval'" class="text-center">
         <div class="text-white text-4xl font-bold">{{ wod.currentRound + 1 }} / {{ wod.config.rounds }}</div>
         <div class="text-white/70 text-sm mt-1">Round</div>
-        <div class="text-white/50 text-xs mt-2">Temps total : {{ wod.totalTimeLabel }}</div>
       </div>
 
-      <!-- Done screen -->
       <div v-if="wod.finished" class="text-center mt-4">
         <div class="text-white text-2xl font-bold mb-2">🏆 Terminé !</div>
-        <div v-if="wod.mode === 'amrap'" class="text-white text-lg">
-          {{ wod.rounds }} round{{ wod.rounds > 1 ? 's' : '' }}
+        <div v-if="wod.mode === 'amrap' && wod.segmentRounds.length > 0" class="text-white text-base">
+          <span v-if="wod.segmentRounds.length === 1">{{ wod.segmentRounds[0] }} rounds</span>
+          <div v-else class="space-y-1">
+            <div v-for="(r, i) in wod.segmentRounds" :key="i">
+              Timer {{ i + 1 }} : {{ r }} rounds
+            </div>
+          </div>
         </div>
-        <div v-else class="text-white/70 text-sm">Temps total : {{ wod.totalTimeLabel }}</div>
         <button @click="goBack"
           class="bg-white text-gray-900 rounded-xl px-8 py-3 font-semibold mt-6 active:scale-95 transition-transform">
           Retour
@@ -71,8 +78,7 @@
       </div>
     </div>
 
-    <!-- Paused overlay -->
-    <div v-if="wod.paused" class="absolute inset-0 bg-black/60 flex items-center justify-center">
+    <div v-if="wod.paused && !wod.finished" class="absolute inset-0 bg-black/60 flex items-center justify-center">
       <div class="text-center">
         <p class="text-white text-3xl font-bold mb-4">⏸ Pause</p>
         <button @click="wod.resume()"
@@ -80,7 +86,6 @@
       </div>
     </div>
 
-    <!-- Confirm stop modal -->
     <div v-if="confirmStop" class="fixed inset-0 bg-black/60 z-50 flex items-end justify-center px-4 pb-8"
       @click.self="confirmStop = false">
       <div class="bg-white rounded-3xl p-6 w-full max-w-sm">
@@ -110,23 +115,34 @@ const modeLabel = computed(() => ({
   amrap: 'AMRAP', emom: 'EMOM', fortime: 'For Time', tabata: 'Tabata', interval: 'Intervalles'
 }[wod.mode] || ''))
 
-// Background color : green for work, amber for rest, dark navy for countdown & done
+const mainTime = computed(() => {
+  if (wod.mode === 'fortime' && wod.phase === 'work') {
+    return formatTime(wod.elapsed)
+  }
+  return wod.phaseTimeLabel
+})
+
+// Chrono COLOR : green by default, red on last 3s, white during countdown
+const chronoColor = computed(() => {
+  if (wod.phase === 'countdown') return '#fff'
+  if (wod.phase === 'between' || wod.phase === 'rest') return '#FCD34D'
+  if (wod.phaseRemaining > 0 && wod.phaseRemaining <= 3) return '#FCA5A5'
+  if (wod.finished) return '#86EFAC'
+  return '#86EFAC'  // green
+})
+
+// Background : navy countdown, ambre rest/between, dark green during work, teal done
 const bgColor = computed(() => {
   if (wod.phase === 'countdown') return '#1a1a2e'
+  if (wod.phase === 'between') return '#854F0B'
   if (wod.phase === 'rest') return '#854F0B'
   if (wod.phase === 'done' || wod.finished) return '#0F6E56'
-  return '#3B6D11'  // work (green)
+  return '#0a2a1f'  // dark green to make green chrono pop
 })
 
 function togglePause() {
   if (wod.paused) wod.resume()
   else wod.pause()
-}
-
-function finishForTime() {
-  wod.stop()
-  wod.finished = true
-  wod.phase = 'done'
 }
 
 function stopAndExit() {
@@ -139,9 +155,20 @@ function goBack() {
   router.push('/timer')
 }
 
-function formatCap(sec) {
+function formatTime(sec) {
+  if (sec < 0) sec = 0
   const m = Math.floor(sec / 60)
-  return `${m}:00`
+  const s = sec % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function formatInterval(sec) {
+  if (!sec) return ''
+  if (sec < 60) return `${sec}s`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (s === 0) return `${m} min`
+  return `${m}min${s}s`
 }
 
 onMounted(() => {
