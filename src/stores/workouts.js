@@ -95,12 +95,10 @@ export const useWorkoutsStore = defineStore('workouts', () => {
   }
 
   async function reorderWorkouts(orderedIds) {
-    // Updates display_order for each workout
     const updates = orderedIds.map((id, idx) =>
       supabase.from('workouts').update({ display_order: idx }).eq('id', id)
     )
     await Promise.all(updates)
-    // Re-fetch to update local state
     await fetchWorkouts()
   }
 
@@ -133,10 +131,41 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     return data
   }
 
+  // Met à jour les colonnes média d'un exercice
+  async function updateExerciseMedia(exerciseId, mediaUpdate) {
+    const auth = useAuthStore()
+    // Si l'exercice est is_default, on doit créer une copie perso pour cet utilisateur
+    // Mais pour simplifier, on autorise update direct si user_id matche
+    const ex = exercises.value.find(e => e.id === exerciseId)
+    if (!ex) throw new Error('Exercice introuvable')
+
+    // Cas 1 : exo perso de l'utilisateur → update direct
+    if (ex.user_id === auth.user.id) {
+      const { error } = await supabase
+        .from('exercises')
+        .update(mediaUpdate)
+        .eq('id', exerciseId)
+      if (error) throw error
+    } else {
+      // Cas 2 : exo par défaut → on update aussi directement
+      // (les RLS doivent autoriser update sur les is_default si on veut que tous les users partagent)
+      // En pratique, ici on fait un update qui ne fonctionnera que si la RLS le permet
+      const { error } = await supabase
+        .from('exercises')
+        .update(mediaUpdate)
+        .eq('id', exerciseId)
+      if (error) throw new Error('Pas autorisé à modifier cet exercice. Crée une copie perso.')
+    }
+
+    // Mise à jour locale
+    Object.assign(ex, mediaUpdate)
+  }
+
   return {
     workouts, exercises, loading,
     fetchWorkouts, fetchExercises,
     createWorkout, updateWorkout, deleteWorkout, duplicateWorkout, reorderWorkouts,
-    saveWorkoutItems, createExercise
+    saveWorkoutItems, createExercise,
+    updateExerciseMedia
   }
 })

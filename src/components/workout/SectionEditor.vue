@@ -8,7 +8,7 @@
       </div>
     </div>
 
-    <div ref="listRef" class="p-2 space-y-2 bg-white">
+    <div ref="listRef" class="px-2 pt-2 space-y-2 bg-white">
       <div v-for="item in items" :key="item._key"
         class="p-2 bg-gray-50 rounded-xl flex items-start gap-2 drag-handle"
         :data-key="item._key">
@@ -16,7 +16,10 @@
           <span class="text-lg leading-none">⋮⋮</span>
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-gray-900 truncate">{{ item.exercise?.name }}</p>
+          <div class="flex items-center justify-between gap-2 mb-0.5">
+            <p class="text-sm font-medium text-gray-900 truncate">{{ item.exercise?.name }}</p>
+            <PreviewButton :exercise="item.exercise" @preview="$emit('preview', item.exercise)" />
+          </div>
           <p class="text-xs text-gray-400 mb-2 truncate">
             {{ unitInfo(item).icon }} {{ unitInfo(item).label }}
             <span v-if="item.exercise?.equipment"> · {{ item.exercise.equipment }}</span>
@@ -45,17 +48,18 @@
             </div>
           </div>
         </div>
-        <button @click="$emit('remove', item)"
+        <button @click.stop="$emit('remove', item)"
           class="text-gray-300 hover:text-red-400 text-base leading-none pt-0.5 px-1">×</button>
       </div>
     </div>
 
-    <div class="p-2">
+    <div class="p-2 bg-white">
       <button @click="$emit('add')"
-        class="w-full text-center text-xs font-medium py-2 border border-dashed rounded-xl"
+        type="button"
+        class="w-full text-center text-sm font-semibold py-3 border-2 border-dashed rounded-xl active:scale-95 transition-transform"
         :style="embedded
-          ? 'color:#A32D2D;border-color:rgba(163,45,45,0.3)'
-          : `color:${color};border-color:${color}40`">
+          ? 'color:#A32D2D;border-color:rgba(163,45,45,0.4);background:rgba(252,235,235,0.5)'
+          : `color:${color};border-color:${color}66;background:${bg}33`">
         + Ajouter un exercice
       </button>
     </div>
@@ -63,9 +67,10 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref } from 'vue'
 import { getUnit } from '@/lib/units'
 import { useSortable } from '@/composables/useSortable'
+import PreviewButton from '@/components/ui/PreviewButton.vue'
 
 const props = defineProps({
   section: { type: String, required: true },
@@ -76,7 +81,7 @@ const props = defineProps({
   items: { type: Array, default: () => [] },
   embedded: { type: Boolean, default: false }
 })
-const emit = defineEmits(['add', 'remove', 'reorder'])
+const emit = defineEmits(['add', 'remove', 'reorder', 'preview'])
 
 const listRef = ref(null)
 

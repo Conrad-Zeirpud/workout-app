@@ -1,91 +1,83 @@
 <template>
   <div class="pb-24">
     <ToastContainer />
+    <ResumeSessionModal
+      :visible="showResume"
+      :snapshot="pendingSnapshot"
+      @resume="handleResume"
+      @discard="handleDiscard"
+      @dismiss="showResume = false"
+    />
+
     <!-- Header -->
-    <div class="bg-brand px-5 pt-12 pb-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-white/60 text-sm">Bonjour 👋</p>
-          <h1 class="text-white text-xl font-bold">{{ greeting }}</h1>
-        </div>
-        <router-link to="/profile" class="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white text-sm">👤</router-link>
-      </div>
-      <div class="grid grid-cols-3 gap-3 mt-5">
-        <div class="bg-white/10 rounded-2xl p-3 text-center">
-          <div class="text-2xl font-bold text-white">{{ stats.weeklyCount }}</div>
-          <div class="text-white/60 text-xs mt-0.5">cette semaine</div>
-        </div>
-        <div class="bg-white/10 rounded-2xl p-3 text-center">
-          <div class="text-2xl font-bold text-white">{{ totalDurationLabel }}</div>
-          <div class="text-white/60 text-xs mt-0.5">durée totale</div>
-        </div>
-        <div class="bg-white/10 rounded-2xl p-3 text-center">
-          <div class="text-2xl font-bold text-white">{{ stats.prs.length }}</div>
-          <div class="text-white/60 text-xs mt-0.5">records</div>
-        </div>
-      </div>
+    <div class="bg-brand px-5 pt-12 pb-8">
+      <p class="text-white/70 text-sm">{{ greeting }}</p>
+      <h1 class="text-white text-2xl font-bold mt-1">{{ userName }}</h1>
+      <p class="text-white/50 text-xs mt-1">{{ today }}</p>
     </div>
 
-    <div class="px-4 mt-5 space-y-5">
-      <!-- Séance du jour -->
+    <div class="px-4 mt-5 space-y-4">
+      <!-- Today's scheduled sessions -->
       <div v-if="todaysSessions.length > 0">
-        <h2 class="text-sm font-semibold text-gray-900 mb-3">🎯 Aujourd'hui</h2>
+        <h2 class="text-sm font-semibold text-gray-900 mb-3">📅 Aujourd'hui</h2>
         <div class="space-y-2">
           <div v-for="s in todaysSessions" :key="s.id"
             class="card p-4 flex items-center gap-3"
-            :style="`border-left: 4px solid ${getCat(s.workout?.category).color}`">
-            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
-              :style="`background:${getCat(s.workout?.category).bg}`">
-              {{ getCat(s.workout?.category).icon }}
-            </div>
+            :style="`border-left: 3px solid ${getCat(s.workout?.category).color}`">
+            <span class="text-2xl">{{ getCat(s.workout?.category).icon }}</span>
             <div class="flex-1 min-w-0">
-              <p class="font-semibold text-gray-900">{{ s.workout?.name }}</p>
-              <WorkoutCategoryBadge :category="s.workout?.category" />
+              <p class="font-semibold text-gray-900 truncate">{{ s.workout?.name }}</p>
+              <p class="text-xs text-gray-400">{{ s.workout?.workout_items?.length || 0 }} exercices</p>
             </div>
-            <button v-if="!s.completed" @click="launchScheduled(s)"
-              class="btn-accent text-sm py-2 px-4">▶ Lancer</button>
-            <span v-else class="text-xs text-green-600 font-medium">✓ Fait</span>
+            <button v-if="!s.completed"
+              @click="launchScheduled(s)"
+              class="btn-accent text-sm py-2 px-4">▶</button>
+            <span v-else class="text-green-500 text-lg">✓</span>
           </div>
         </div>
       </div>
 
-      <!-- Calendrier -->
-      <div class="card p-4">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-sm font-semibold text-gray-900">Calendrier</h2>
-          <router-link to="/planning" class="text-xs text-brand font-medium">Planifier</router-link>
+      <!-- Stats -->
+      <div class="grid grid-cols-3 gap-2">
+        <div class="card p-3 text-center">
+          <p class="text-xl font-bold text-gray-900">{{ stats.weekCount }}</p>
+          <p class="text-xs text-gray-400 mt-0.5">cette semaine</p>
         </div>
-        <CalendarGrid :data="calendarData" />
-      </div>
-
-      <!-- Séances -->
-      <div>
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-sm font-semibold text-gray-900">Mes séances</h2>
-          <router-link to="/workouts" class="text-xs text-brand font-medium">Voir tout</router-link>
+        <div class="card p-3 text-center">
+          <p class="text-xl font-bold text-gray-900">{{ stats.monthCount }}</p>
+          <p class="text-xs text-gray-400 mt-0.5">ce mois</p>
         </div>
-        <div v-if="workouts.loading" class="text-center py-8 text-gray-400 text-sm">Chargement…</div>
-        <div v-else-if="workouts.workouts.length === 0" class="card p-6 text-center text-gray-400 text-sm">
-          <p class="mb-3">Aucune séance créée</p>
-          <router-link to="/workouts/new" class="btn-primary text-sm inline-block">+ Créer une séance</router-link>
-        </div>
-        <div v-else class="space-y-3">
-          <WorkoutCard v-for="w in workouts.workouts.slice(0,3)" :key="w.id" :workout="w"
-            @start="startWorkout(w)" />
+        <div class="card p-3 text-center">
+          <p class="text-xl font-bold text-gray-900">{{ stats.totalCount }}</p>
+          <p class="text-xs text-gray-400 mt-0.5">total</p>
         </div>
       </div>
 
-      <!-- Derniers PR -->
-      <div v-if="stats.prs?.length > 0">
-        <h2 class="text-sm font-semibold text-gray-900 mb-3">🏆 Derniers records</h2>
+      <!-- Quick actions -->
+      <div class="grid grid-cols-2 gap-3">
+        <router-link to="/workouts" class="card p-4 flex flex-col items-center text-center">
+          <span class="text-3xl mb-1">📋</span>
+          <p class="text-sm font-semibold text-gray-900">Mes séances</p>
+          <p class="text-xs text-gray-400">{{ workouts.workouts.length }} programme(s)</p>
+        </router-link>
+        <router-link to="/timer" class="card p-4 flex flex-col items-center text-center">
+          <span class="text-3xl mb-1">⏱</span>
+          <p class="text-sm font-semibold text-gray-900">Timer WOD</p>
+          <p class="text-xs text-gray-400">AMRAP, EMOM, Tabata…</p>
+        </router-link>
+      </div>
+
+      <!-- Recent sessions -->
+      <div v-if="recent.length > 0">
+        <h2 class="text-sm font-semibold text-gray-900 mb-3">Dernières séances</h2>
         <div class="space-y-2">
-          <div v-for="pr in stats.prs.slice(0,3)" :key="pr.id" class="card p-3 flex items-center gap-3">
-            <PRBadge />
-            <div class="flex-1">
-              <p class="text-sm font-medium text-gray-900">{{ pr.exercise?.name }}</p>
-              <p class="text-xs text-gray-400">{{ pr.weight_kg }}kg × {{ pr.reps_done }} reps</p>
+          <div v-for="s in recent.slice(0, 3)" :key="s.id"
+            class="card p-3 flex items-center gap-3">
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-gray-900 truncate">{{ s.workout?.name || 'Séance' }}</p>
+              <p class="text-xs text-gray-400">{{ formatRelative(s.started_at) }} · {{ formatDuration(s.duration_seconds) }}</p>
             </div>
-            <span class="text-xs text-gray-400">{{ formatDate(pr.session?.started_at) }}</span>
+            <span v-if="hasPR(s)" class="text-yellow-500 text-lg" title="Record battu">🏆</span>
           </div>
         </div>
       </div>
@@ -94,18 +86,16 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkoutsStore } from '@/stores/workouts'
 import { useStatsStore } from '@/stores/stats'
 import { useSessionStore } from '@/stores/session'
 import { usePlanningStore } from '@/stores/planning'
+import { useSessionPersistence } from '@/composables/useSessionPersistence'
 import { getCategory } from '@/lib/categories'
-import CalendarGrid from '@/components/ui/CalendarGrid.vue'
-import WorkoutCard from '@/components/workout/WorkoutCard.vue'
-import WorkoutCategoryBadge from '@/components/ui/WorkoutCategoryBadge.vue'
-import PRBadge from '@/components/ui/PRBadge.vue'
+import ResumeSessionModal from '@/components/session/ResumeSessionModal.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 
 const auth = useAuthStore()
@@ -113,47 +103,88 @@ const workouts = useWorkoutsStore()
 const stats = useStatsStore()
 const session = useSessionStore()
 const planning = usePlanningStore()
+const persistence = useSessionPersistence()
 const router = useRouter()
+
+const showResume = ref(false)
+const pendingSnapshot = ref(null)
+
+const userName = computed(() => auth.user?.email?.split('@')[0] || 'Athlète')
+const greeting = computed(() => {
+  const h = new Date().getHours()
+  if (h < 6) return 'Tu es matinal'
+  if (h < 12) return 'Bonjour'
+  if (h < 18) return 'Bon après-midi'
+  return 'Bonsoir'
+})
+const today = computed(() =>
+  new Date().toLocaleDateString('fr', { weekday: 'long', day: 'numeric', month: 'long' })
+)
+
 const getCat = getCategory
 
-const greeting = computed(() => auth.user?.email?.split('@')[0] || 'Athlète')
-const totalDurationLabel = computed(() => {
-  const h = Math.floor(stats.totalDuration / 3600)
-  const m = Math.floor((stats.totalDuration % 3600) / 60)
-  return h > 0 ? `${h}h${String(m).padStart(2,'0')}` : `${m}min`
+const recent = computed(() => stats.sessions.slice(0, 5))
+const todaysSessions = computed(() => {
+  const today = new Date().toISOString().slice(0, 10)
+  return planning.scheduled.filter(s => s.scheduled_date === today)
 })
-const calendarData = computed(() => {
-  const now = new Date()
-  return stats.getCalendarData(now.getFullYear(), now.getMonth())
-})
-const todaysSessions = computed(() => planning.getTodaysSessions())
 
-function formatDate(iso) {
+function formatRelative(iso) {
   if (!iso) return ''
-  return new Date(iso).toLocaleDateString('fr', { day: '2-digit', month: '2-digit' })
+  const d = new Date(iso)
+  const now = new Date()
+  const diffH = Math.floor((now - d) / 3600000)
+  if (diffH < 24) return `il y a ${diffH}h`
+  const diffD = Math.floor(diffH / 24)
+  if (diffD < 7) return `il y a ${diffD}j`
+  return d.toLocaleDateString('fr', { day: '2-digit', month: '2-digit' })
 }
-
-function startWorkout(w) {
-  session.startSession(w)
-  router.push(`/session/${w.id}`)
+function formatDuration(sec) {
+  if (!sec) return '—'
+  const m = Math.floor(sec / 60)
+  return `${m}min`
+}
+function hasPR(s) {
+  return s.session_sets?.some(x => x.pr)
 }
 
 function launchScheduled(s) {
-  const w = workouts.workouts.find(w => w.id === s.workout?.id)
+  if (!s.workout?.id) return
+  const w = workouts.workouts.find(w => w.id === s.workout.id)
   if (!w) return
   session.startSession(w)
   sessionStorage.setItem('scheduledSessionId', s.id)
   router.push(`/session/${w.id}`)
 }
 
-onMounted(async () => {
+async function handleResume() {
+  const snapshot = persistence.load()
+  if (!snapshot) { showResume.value = false; return }
+  // Make sure workouts are fetched so we have full context if needed
   await workouts.fetchWorkouts()
-  await stats.fetchSessions()
-  await stats.fetchPRs()
-  // Load upcoming schedule (7 days)
-  const today = new Date()
-  const weekAhead = new Date(today); weekAhead.setDate(today.getDate() + 7)
-  const toStr = d => d.toISOString().slice(0, 10)
-  await planning.fetchScheduled(toStr(today), toStr(weekAhead))
+  session.resumeFromSnapshot(snapshot)
+  showResume.value = false
+  router.push(`/session/${snapshot.workout.id}`)
+}
+
+function handleDiscard() {
+  persistence.clear()
+  showResume.value = false
+  pendingSnapshot.value = null
+}
+
+onMounted(async () => {
+  await Promise.all([
+    workouts.fetchWorkouts(),
+    stats.fetchSessions(20),
+    planning.fetchScheduledForDate(new Date().toISOString().slice(0, 10))
+  ])
+
+  // Détecter une séance abandonnée
+  const snap = persistence.load()
+  if (snap && !session.active) {
+    pendingSnapshot.value = snap
+    showResume.value = true
+  }
 })
 </script>

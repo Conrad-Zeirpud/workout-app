@@ -1,6 +1,8 @@
 <template>
   <div class="pb-28">
     <ToastContainer />
+    <ExercisePreviewOverlay :visible="!!previewExercise" :exercise="previewExercise" @close="previewExercise = null" />
+
     <PageHeader :title="isEdit ? 'Modifier la séance' : 'Nouvelle séance'" back>
       <template #right>
         <button @click="save" :disabled="saving"
@@ -45,12 +47,14 @@
       <SectionEditor section="warmup" title="Échauffement" icon="🔥" color="#EF9F27" bg="#FAEEDA"
         :items="warmupItems"
         @add="openPicker('warmup')" @remove="removeItem"
-        @reorder="(e) => reorderInSection('warmup', e.oldIdx, e.newIdx)" />
+        @reorder="(e) => reorderInSection('warmup', e.oldIdx, e.newIdx)"
+        @preview="ex => previewExercise = ex" />
 
       <SectionEditor section="main" title="Exercices" icon="💪" color="#639922" bg="#EAF3DE"
         :items="mainItems"
         @add="openPicker('main')" @remove="removeItem"
-        @reorder="(e) => reorderInSection('main', e.oldIdx, e.newIdx)" />
+        @reorder="(e) => reorderInSection('main', e.oldIdx, e.newIdx)"
+        @preview="ex => previewExercise = ex" />
 
       <div class="card overflow-hidden">
         <div class="p-3 flex items-center gap-3" style="background:#FCEBEB">
@@ -141,13 +145,15 @@
 
         <SectionEditor section="wod" :items="wodItems" :embedded="true"
           @add="openPicker('wod')" @remove="removeItem"
-          @reorder="(e) => reorderInSection('wod', e.oldIdx, e.newIdx)" />
+          @reorder="(e) => reorderInSection('wod', e.oldIdx, e.newIdx)"
+          @preview="ex => previewExercise = ex" />
       </div>
     </div>
 
     <ExercisePickerModal :visible="!!pickerSection" :section="pickerSection"
       :exercises="workouts.exercises"
-      @select="confirmAddExercise" @close="pickerSection = null" />
+      @select="confirmAddExercise" @close="pickerSection = null"
+      @preview="ex => previewExercise = ex" />
   </div>
 </template>
 
@@ -161,6 +167,7 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 import SectionEditor from '@/components/workout/SectionEditor.vue'
 import ExercisePickerModal from '@/components/workout/ExercisePickerModal.vue'
+import ExercisePreviewOverlay from '@/components/ui/ExercisePreviewOverlay.vue'
 import DurationPicker from '@/components/ui/DurationPicker.vue'
 import CountWheel from '@/components/ui/CountWheel.vue'
 import NumberWheel from '@/components/ui/NumberWheel.vue'
@@ -174,6 +181,7 @@ const isEdit = computed(() => !!route.params.id)
 const saving = ref(false)
 const pickerSection = ref(null)
 const showWodConfig = ref(false)
+const previewExercise = ref(null)
 let keyCounter = 0
 
 const form = ref({
@@ -240,12 +248,9 @@ function reorderInSection(section, oldIdx, newIdx) {
   const moved = sectionItems[oldIdx]
   const target = sectionItems[newIdx]
   if (!moved || !target) return
-  // Remove moved from all
   const movedAllIdx = all.indexOf(moved)
   all.splice(movedAllIdx, 1)
-  // Insert at the position of target (recalculated)
   const targetAllIdx = all.indexOf(target)
-  // If we're moving downwards, insert AFTER target
   const insertIdx = oldIdx < newIdx ? targetAllIdx + 1 : targetAllIdx
   all.splice(insertIdx, 0, moved)
 }

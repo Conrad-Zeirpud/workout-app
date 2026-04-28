@@ -1,6 +1,7 @@
 <template>
   <div class="min-h-screen flex flex-col bg-gray-50">
     <ToastContainer />
+    <ExercisePreviewOverlay :visible="!!previewExercise" :exercise="previewExercise" @close="previewExercise = null" />
 
     <template v-if="session.active">
       <div class="px-4 pb-3" :style="`background:${headerColor}; padding-top: max(2.5rem, env(safe-area-inset-top))`">
@@ -8,7 +9,7 @@
           <button @click="confirmCancel = true" class="text-white/50 text-sm px-2 py-1 rounded-lg hover:bg-white/10">✕</button>
           <div class="text-center flex-1">
             <p class="text-white font-bold truncate mx-2">{{ session.workout?.name }}</p>
-            <p class="text-white/60 text-xs">{{ sectionLabel }} · ex. {{ session.currentExerciseIndex + 1 }} / {{ session.totalExercises }}</p>
+            <p class="text-white/60 text-xs">{{ sectionLabel }}<span v-if="!isWodSection"> · ex. {{ session.currentExerciseIndex + 1 }} / {{ session.totalExercises }}</span></p>
           </div>
           <div class="text-right min-w-16">
             <p class="text-white font-mono font-bold text-lg">{{ session.elapsedFormatted }}</p>
@@ -28,8 +29,7 @@
         </div>
       </div>
 
-      <!-- WOD entry banner -->
-      <div v-if="session.currentSection === 'wod' && session.workout?.wod_mode"
+      <div v-if="isWodSection && session.workout?.wod_mode"
         class="px-4 py-3 flex items-center gap-3" style="background:#FCEBEB; border-bottom:1px solid #fbcaca">
         <span class="text-xl">{{ wodModeIcon }}</span>
         <div class="flex-1">
@@ -38,12 +38,12 @@
           </p>
           <p class="text-xs" style="color:#A32D2D;opacity:0.7">{{ wodConfigLabel }}</p>
         </div>
-        <button @click="launchWodTimer" class="bg-red-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">
+        <button @click="launchWodTimer"
+          class="bg-red-500 text-white text-sm font-bold px-4 py-2 rounded-lg active:scale-95 transition-transform">
           ⏱ Démarrer
         </button>
       </div>
 
-      <!-- Section tabs -->
       <div class="flex px-3 py-2 gap-1.5 overflow-x-auto bg-white border-b border-gray-100 flex-shrink-0">
         <button v-if="session.hasWarmup"
           @click="session.jumpToSection('warmup')"
@@ -62,64 +62,74 @@
           :style="session.currentSection === 'wod' ? 'background:#E24B4A' : ''">🏁 WOD</button>
       </div>
 
-      <div class="flex px-3 pt-2 gap-1 overflow-x-auto pb-2 bg-white border-b border-gray-100 flex-shrink-0">
-        <button v-for="(item, i) in session.orderedItems" :key="item.id"
-          @click="session.currentExerciseIndex = i"
-          class="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
-          :class="i === session.currentExerciseIndex
-            ? 'text-white'
-            : allSetsDone(item) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'"
-          :style="i === session.currentExerciseIndex ? `background:${currentSectionColor}` : ''">
-          <span v-if="allSetsDone(item) && i !== session.currentExerciseIndex">✓</span>
-          {{ item.exercise?.name || `Ex.` }}
-        </button>
+      <div v-if="isWodSection" class="flex-1 overflow-y-auto">
+        <WodBoardInline :workout="session.workout" :wod-items="wodItems" />
       </div>
 
-      <div v-if="session.currentExercise" class="flex-1 overflow-y-auto px-4 py-4 pb-32">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-            :style="`background:${currentSectionBg}`">{{ unitInfo(session.currentExercise).icon }}</div>
-          <div class="flex-1">
-            <h2 class="text-lg font-bold text-gray-900">{{ session.currentExercise.exercise?.name }}</h2>
-            <div class="flex items-center gap-2 flex-wrap mt-0.5">
-              <span class="badge bg-gray-100 text-gray-500 text-xs">{{ session.currentExercise.exercise?.muscle_group }}</span>
-              <span class="text-xs text-gray-400">{{ describePrescription(session.currentExercise) }}</span>
+      <template v-else>
+        <div class="flex px-3 pt-2 gap-1 overflow-x-auto pb-2 bg-white border-b border-gray-100 flex-shrink-0">
+          <button v-for="(item, i) in sectionItems" :key="item.id"
+            @click="session.currentExerciseIndex = orderedIndex(item)"
+            class="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
+            :class="orderedIndex(item) === session.currentExerciseIndex
+              ? 'text-white'
+              : allSetsDone(item) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'"
+            :style="orderedIndex(item) === session.currentExerciseIndex ? `background:${currentSectionColor}` : ''">
+            <span v-if="allSetsDone(item) && orderedIndex(item) !== session.currentExerciseIndex">✓</span>
+            {{ item.exercise?.name || `Ex.` }}
+          </button>
+        </div>
+
+        <div v-if="session.currentExercise" class="flex-1 overflow-y-auto px-4 py-4 pb-32">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
+              :style="`background:${currentSectionBg}`">{{ unitInfo(session.currentExercise).icon }}</div>
+            <div class="flex-1">
+              <div class="flex items-center justify-between gap-2">
+                <h2 class="text-lg font-bold text-gray-900">{{ session.currentExercise.exercise?.name }}</h2>
+                <PreviewButton :exercise="session.currentExercise.exercise"
+                  @preview="previewExercise = session.currentExercise.exercise" />
+              </div>
+              <div class="flex items-center gap-2 flex-wrap mt-0.5">
+                <span class="badge bg-gray-100 text-gray-500 text-xs">{{ session.currentExercise.exercise?.muscle_group }}</span>
+                <span class="text-xs text-gray-400">{{ describePrescription(session.currentExercise) }}</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div v-if="previousBest" class="mb-3 px-3 py-2 bg-blue-50 rounded-xl flex items-center gap-2">
-          <span class="text-blue-400 text-sm">📊</span>
-          <p class="text-xs text-blue-700">
-            Dernière fois : <strong>{{ describePrevious(previousBest) }}</strong>
-          </p>
-        </div>
+          <div v-if="previousBest" class="mb-3 px-3 py-2 bg-blue-50 rounded-xl flex items-center gap-2">
+            <span class="text-blue-400 text-sm">📊</span>
+            <p class="text-xs text-blue-700">
+              Dernière fois : <strong>{{ describePrevious(previousBest) }}</strong>
+            </p>
+          </div>
 
-        <div class="space-y-2">
-          <SetRow
-            v-for="set in currentSets"
-            :key="set.set_number"
-            :set="set"
-            :unit="session.currentExercise.exercise?.unit || 'weight'"
-            @complete="handleCompleteSet"
-          />
+          <div class="space-y-2">
+            <SetRow
+              v-for="set in currentSets"
+              :key="set.set_number"
+              :set="set"
+              :unit="session.currentExercise.exercise?.unit || 'weight'"
+              @complete="handleCompleteSet"
+            />
+          </div>
         </div>
-      </div>
+      </template>
 
       <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3"
         style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom))">
         <div class="flex gap-3">
-          <button @click="session.prevExercise()"
+          <button v-if="!isWodSection" @click="session.prevExercise()"
             :disabled="session.currentExerciseIndex === 0"
             class="btn-ghost flex-1 text-sm py-3 disabled:opacity-30">← Préc.</button>
-          <button v-if="session.currentExerciseIndex < session.totalExercises - 1"
+          <button v-if="!isWodSection && session.currentExerciseIndex < session.totalExercises - 1"
             @click="session.nextExercise()"
             class="btn-accent flex-1 text-sm py-3">Suivant →</button>
           <button v-else @click="finish()" :disabled="finishing"
             class="flex-1 text-sm py-3 font-semibold rounded-xl text-white flex items-center justify-center gap-2"
             style="background:var(--accent)">
             <span v-if="finishing" class="animate-spin text-xs">⟳</span>
-            🏁 Terminer
+            🏁 Terminer la séance
           </button>
         </div>
       </div>
@@ -156,7 +166,10 @@ import { useToast } from '@/composables/useToast'
 import { describePrescription, getUnit } from '@/lib/units'
 import RestTimerOverlay from '@/components/session/RestTimerOverlay.vue'
 import SetRow from '@/components/session/SetRow.vue'
+import WodBoardInline from '@/components/session/WodBoardInline.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
+import ExercisePreviewOverlay from '@/components/ui/ExercisePreviewOverlay.vue'
+import PreviewButton from '@/components/ui/PreviewButton.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -168,10 +181,17 @@ const { show } = useToast()
 const confirmCancel = ref(false)
 const finishing = ref(false)
 const previousBest = ref(null)
+const previewExercise = ref(null)
 
+const isWodSection = computed(() => session.currentSection === 'wod')
+const wodItems = computed(() => session.orderedItems.filter(i => (i.section || 'main') === 'wod'))
 const currentSets = computed(() =>
   session.currentExercise ? session.getSetsForExercise(session.currentExercise.exercise_id) : []
 )
+const sectionItems = computed(() =>
+  session.orderedItems.filter(i => (i.section || 'main') === session.currentSection)
+)
+function orderedIndex(item) { return session.orderedItems.indexOf(item) }
 
 const nextExerciseName = computed(() => {
   const next = session.orderedItems[session.currentExerciseIndex + 1]
@@ -183,9 +203,7 @@ const sectionLabel = computed(() => ({
 }[session.currentSection]))
 
 const headerColor = computed(() => ({
-  warmup: '#854F0B',
-  main: '#1a1a2e',
-  wod: '#A32D2D'
+  warmup: '#854F0B', main: '#1a1a2e', wod: '#A32D2D'
 }[session.currentSection] || '#1a1a2e'))
 
 const currentSectionColor = computed(() => ({
@@ -275,6 +293,11 @@ function handleCompleteSet(set) { session.completeSet(set) }
 async function finish() {
   finishing.value = true
   try {
+    if (isWodSection.value) {
+      wodItems.value.forEach(item => {
+        session.getSetsForExercise(item.exercise_id).forEach(s => { s.done = true })
+      })
+    }
     const completedSets = session.sets.filter(s => s.done).map(s => ({
       ...s,
       exercise: session.orderedItems.find(i => i.exercise_id === s.exercise_id)?.exercise

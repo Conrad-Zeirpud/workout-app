@@ -1,9 +1,12 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from './auth'
+import { useSessionPersistence } from '@/composables/useSessionPersistence'
 
 export const useSessionStore = defineStore('session', () => {
+  const persistence = useSessionPersistence()
+
   const active = ref(false)
   const sessionId = ref(null)
   const workout = ref(null)
@@ -16,7 +19,6 @@ export const useSessionStore = defineStore('session', () => {
   let timerInterval = null
   let restInterval = null
 
-  // Computed: ordered exercises (warmup → main → wod)
   const orderedItems = computed(() => {
     if (!workout.value?.workout_items) return []
     const sectionOrder = { warmup: 0, main: 1, wod: 2 }
@@ -42,7 +44,6 @@ export const useSessionStore = defineStore('session', () => {
     totalExercises.value ? Math.round((currentExerciseIndex.value / totalExercises.value) * 100) : 0
   )
 
-  // Booleans for section presence
   const hasWarmup = computed(() => orderedItems.value.some(i => i.section === 'warmup'))
   const hasMain = computed(() => orderedItems.value.some(i => i.section === 'main' || !i.section))
   const hasWod = computed(() => orderedItems.value.some(i => i.section === 'wod'))
@@ -56,6 +57,18 @@ export const useSessionStore = defineStore('session', () => {
     sets.value = []
     _initSets()
     timerInterval = setInterval(() => { elapsed.value++ }, 1000)
+    _persist()
+  }
+
+  // Resume from a saved snapshot
+  function resumeFromSnapshot(snapshot) {
+    workout.value = snapshot.workout
+    active.value = true
+    startedAt.value = new Date(snapshot.startedAt)
+    elapsed.value = snapshot.elapsed || 0
+    currentExerciseIndex.value = snapshot.currentExerciseIndex || 0
+    sets.value = snapshot.sets || []
+    timerInterval = setInterval(() => { elapsed.value++; _persist() }, 1000)
   }
 
   function _initSets() {
@@ -82,10 +95,10 @@ export const useSessionStore = defineStore('session', () => {
   function completeSet(set) {
     set.done = true
     const item = currentExercise.value
-    // No rest timer during WOD section (timer is the WOD itself)
     if (item && currentSection.value !== 'wod') {
       startRest(item.rest_seconds || 90)
     }
+    _persist()
   }
 
   function startRest(seconds) {
@@ -108,20 +121,36 @@ export const useSessionStore = defineStore('session', () => {
     if (currentExerciseIndex.value < totalExercises.value - 1) {
       currentExerciseIndex.value++
       stopRest()
+      _persist()
     }
   }
 
   function prevExercise() {
-    if (currentExerciseIndex.value > 0) currentExerciseIndex.value--
+    if (currentExerciseIndex.value > 0) {
+      currentExerciseIndex.value--
+      _persist()
+    }
   }
 
-  // Jump to first exercise of a given section
   function jumpToSection(section) {
     const idx = orderedItems.value.findIndex(i => (i.section || 'main') === section)
     if (idx >= 0) {
       currentExerciseIndex.value = idx
       stopRest()
+      _persist()
     }
+  }
+
+  // Persist current state to localStorage
+  function _persist() {
+    if (!active.value || !workout.value) return
+    persistence.save({
+      workout: workout.value,
+      startedAt: startedAt.value?.toISOString(),
+      elapsed: elapsed.value,
+      currentExerciseIndex: currentExerciseIndex.value,
+      sets: sets.value
+    })
   }
 
   async function finishSession() {
@@ -159,6 +188,7 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     active.value = false
+    persistence.clear()  // Important : effacer la sauvegarde locale
     return { sessionId: session.id, duration, setsCount: doneSets.length }
   }
 
@@ -196,6 +226,7 @@ export const useSessionStore = defineStore('session', () => {
     active.value = false
     workout.value = null
     sets.value = []
+    persistence.clear()  // Effacer la sauvegarde locale
   }
 
   const elapsedFormatted = computed(() => {
@@ -211,7 +242,8 @@ export const useSessionStore = defineStore('session', () => {
     restTimer, restActive,
     currentExercise, currentSection, totalExercises, progress, orderedItems,
     hasWarmup, hasMain, hasWod,
-    startSession, getSetsForExercise, completeSet, startRest, stopRest,
+    startSession, resumeFromSnapshot,
+    getSetsForExercise, completeSet, startRest, stopRest,
     nextExercise, prevExercise, jumpToSection, finishSession, cancelSession
   }
 })
