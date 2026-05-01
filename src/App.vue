@@ -6,6 +6,8 @@
       </transition>
     </router-view>
     <BottomNav v-if="showNav" />
+    <FloatingBotButton />
+    <BotModal />
   </div>
 </template>
 
@@ -13,6 +15,8 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import BottomNav from '@/components/ui/BottomNav.vue'
+import FloatingBotButton from '@/components/bot/FloatingBotButton.vue'
+import BotModal from '@/components/bot/BotModal.vue'
 
 const route = useRoute()
 const showNav = computed(() => !['auth', 'session', 'session-summary', 'timer-run'].includes(route.name))

@@ -8,12 +8,30 @@
       :exercise="previewExercise"
       @close="previewExercise = null" />
 
+    <SyncMediaModal
+      :visible="showSync"
+      :exercises="workouts.exercises"
+      @close="showSync = false"
+      @done="onSyncDone" />
+
     <div class="px-4 mt-4">
+      <!-- CTA création -->
       <button @click="showForm = true"
-        class="w-full mb-4 py-4 rounded-2xl flex items-center justify-center gap-2 font-semibold text-white text-base active:scale-95 transition-transform"
+        class="w-full mb-3 py-4 rounded-2xl flex items-center justify-center gap-2 font-semibold text-white text-base active:scale-95 transition-transform"
         style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e); box-shadow:0 6px 20px rgba(26,26,46,0.25)">
         <span class="text-xl">➕</span>
         Créer un exercice personnalisé
+      </button>
+
+      <!-- Sync button -->
+      <button @click="showSync = true"
+        class="w-full mb-4 py-3 rounded-xl flex items-center justify-center gap-2 font-medium text-sm active:scale-95 transition-transform"
+        style="background:#E6F1FB;color:#0C447C;border:1px solid #B8D9F1">
+        <span>🔄</span>
+        Synchroniser les médias
+        <span v-if="missingMediaCount > 0" class="ml-1 text-xs bg-blue-500 text-white rounded-full px-2 py-0.5">
+          {{ missingMediaCount }} sans visuel
+        </span>
       </button>
 
       <input v-model="search" placeholder="Rechercher un exercice…" class="input mb-3" />
@@ -59,7 +77,7 @@
             <PreviewButton :exercise="ex" @preview="previewExercise = ex" />
             <button @click="openMediaEdit(ex)"
               class="text-[10px] text-gray-400 underline">
-              {{ ex.media_url ? 'Modifier média' : '+ Ajouter média' }}
+              {{ ex.media_url ? 'Modifier' : '+ Média' }}
             </button>
           </div>
         </div>
@@ -118,7 +136,7 @@
         <div class="space-y-3 mb-4">
           <input v-model="mediaForm.url" placeholder="https://…" class="input text-sm" />
 
-          <button @click="searchExerciseDb"
+          <button @click="searchSingle"
             :disabled="searching"
             class="w-full py-2 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium flex items-center justify-center gap-2">
             <span v-if="searching" class="animate-spin">⟳</span>
@@ -135,7 +153,7 @@
             </button>
           </div>
           <p v-else-if="searchAttempted" class="text-xs text-gray-400 text-center">
-            Aucun résultat trouvé sur ExerciseDB
+            Aucun résultat trouvé
           </p>
         </div>
 
@@ -156,16 +174,19 @@ import { ref, computed, onMounted } from 'vue'
 import { useWorkoutsStore } from '@/stores/workouts'
 import { useToast } from '@/composables/useToast'
 import { searchExerciseDB, detectMediaType } from '@/lib/exerciseMedia'
+import { exerciseNameToQuery, SKIP_EXERCISES } from '@/lib/exerciseNameMap'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 import ExercisePreviewOverlay from '@/components/ui/ExercisePreviewOverlay.vue'
 import PreviewButton from '@/components/ui/PreviewButton.vue'
+import SyncMediaModal from '@/components/ui/SyncMediaModal.vue'
 
 const workouts = useWorkoutsStore()
 const { show } = useToast()
 const search = ref('')
 const filterSection = ref('')
 const showForm = ref(false)
+const showSync = ref(false)
 const previewExercise = ref(null)
 
 const form = ref({
@@ -189,6 +210,12 @@ const filtered = computed(() =>
     const matchSection = !filterSection.value || sections.includes(filterSection.value)
     return matchSearch && matchSection
   })
+)
+
+const missingMediaCount = computed(() =>
+  workouts.exercises.filter(ex =>
+    !ex.media_url && !SKIP_EXERCISES.has(ex.name)
+  ).length
 )
 
 function sectionLabelLong(s) { return ({ warmup: '🔥 Warmup', main: '💪 Exos', wod: '🏁 WOD' }[s] || s) }
@@ -232,11 +259,12 @@ function closeMediaEdit() {
   searchAttempted.value = false
 }
 
-async function searchExerciseDb() {
+async function searchSingle() {
   if (!mediaEditTarget.value?.name) return
   searching.value = true
   searchAttempted.value = true
-  searchResult.value = await searchExerciseDB(mediaEditTarget.value.name)
+  const query = exerciseNameToQuery(mediaEditTarget.value.name)
+  searchResult.value = await searchExerciseDB(query)
   searching.value = false
 }
 
@@ -272,6 +300,11 @@ async function clearMedia() {
     show('Visuel retiré')
     closeMediaEdit()
   } catch { show('Erreur', 'error') }
+}
+
+async function onSyncDone(stats) {
+  show(`✓ ${stats.found} médias ajoutés`)
+  await workouts.fetchExercises()
 }
 
 onMounted(() => workouts.fetchExercises())
