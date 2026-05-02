@@ -5,11 +5,11 @@ import { supabase } from '@/lib/supabase'
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const loading = ref(false)
-  let initialized = false
+  const initialized = ref(false)  // ⚠️ FIX BUG : exposé en ref pour que le router puisse le lire
 
   async function init() {
-    if (initialized) return
-    initialized = true
+    if (initialized.value) return
+    initialized.value = true
     const { data } = await supabase.auth.getSession()
     user.value = data.session?.user ?? null
     supabase.auth.onAuthStateChange((_, session) => {
@@ -36,5 +36,5 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
   }
 
-  return { user, loading, init, signIn, signUp, signOut }
+  return { user, loading, initialized, init, signIn, signUp, signOut }
 })

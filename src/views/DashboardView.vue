@@ -40,30 +40,32 @@
       <!-- Stats -->
       <div class="grid grid-cols-3 gap-2">
         <div class="card p-3 text-center">
-          <p class="text-xl font-bold text-gray-900">{{ stats.weekCount }}</p>
+          <p class="text-xl font-bold text-gray-900">{{ weekCount }}</p>
           <p class="text-xs text-gray-400 mt-0.5">cette semaine</p>
         </div>
         <div class="card p-3 text-center">
-          <p class="text-xl font-bold text-gray-900">{{ stats.monthCount }}</p>
+          <p class="text-xl font-bold text-gray-900">{{ monthCount }}</p>
           <p class="text-xs text-gray-400 mt-0.5">ce mois</p>
         </div>
         <div class="card p-3 text-center">
-          <p class="text-xl font-bold text-gray-900">{{ stats.totalCount }}</p>
+          <p class="text-xl font-bold text-gray-900">{{ totalCount }}</p>
           <p class="text-xs text-gray-400 mt-0.5">total</p>
         </div>
       </div>
 
       <!-- Quick actions -->
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-3 gap-3">
         <router-link to="/workouts" class="card p-4 flex flex-col items-center text-center">
-          <span class="text-3xl mb-1">📋</span>
-          <p class="text-sm font-semibold text-gray-900">Mes séances</p>
-          <p class="text-xs text-gray-400">{{ workouts.workouts.length }} programme(s)</p>
+          <span class="text-2xl mb-1">📋</span>
+          <p class="text-xs font-semibold text-gray-900">Séances</p>
         </router-link>
         <router-link to="/timer" class="card p-4 flex flex-col items-center text-center">
-          <span class="text-3xl mb-1">⏱</span>
-          <p class="text-sm font-semibold text-gray-900">Timer WOD</p>
-          <p class="text-xs text-gray-400">AMRAP, EMOM, Tabata…</p>
+          <span class="text-2xl mb-1">⏱</span>
+          <p class="text-xs font-semibold text-gray-900">Timer WOD</p>
+        </router-link>
+        <router-link to="/programs" class="card p-4 flex flex-col items-center text-center">
+          <span class="text-2xl mb-1">🎯</span>
+          <p class="text-xs font-semibold text-gray-900">Programmes</p>
         </router-link>
       </div>
 
@@ -122,11 +124,21 @@ const today = computed(() =>
 )
 
 const getCat = getCategory
-
 const recent = computed(() => stats.sessions.slice(0, 5))
+
+// Stats calculées localement à partir de stats.sessions
+// (le store n'expose que weeklyCount et totalDuration, pas tous les compteurs)
+const weekCount = computed(() => stats.weeklyCount || 0)
+const monthCount = computed(() => {
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  return (stats.sessions || []).filter(s => new Date(s.started_at) >= monthStart).length
+})
+const totalCount = computed(() => (stats.sessions || []).length)
+
 const todaysSessions = computed(() => {
   const today = new Date().toISOString().slice(0, 10)
-  return planning.scheduled.filter(s => s.scheduled_date === today)
+  return (planning.scheduled || []).filter(s => s.scheduled_date === today)
 })
 
 function formatRelative(iso) {
@@ -144,9 +156,7 @@ function formatDuration(sec) {
   const m = Math.floor(sec / 60)
   return `${m}min`
 }
-function hasPR(s) {
-  return s.session_sets?.some(x => x.pr)
-}
+function hasPR(s) { return s.session_sets?.some(x => x.pr) }
 
 function launchScheduled(s) {
   if (!s.workout?.id) return
@@ -160,7 +170,6 @@ function launchScheduled(s) {
 async function handleResume() {
   const snapshot = persistence.load()
   if (!snapshot) { showResume.value = false; return }
-  // Make sure workouts are fetched so we have full context if needed
   await workouts.fetchWorkouts()
   session.resumeFromSnapshot(snapshot)
   showResume.value = false
@@ -174,13 +183,13 @@ function handleDiscard() {
 }
 
 onMounted(async () => {
+  const today = new Date().toISOString().slice(0, 10)
   await Promise.all([
     workouts.fetchWorkouts(),
-    stats.fetchSessions(20),
-    planning.fetchScheduledForDate(new Date().toISOString().slice(0, 10))
+    stats.fetchSessions(50),  // 50 pour calculer le mois correctement
+    planning.fetchScheduled(today, today)  // bon nom de méthode
   ])
 
-  // Détecter une séance abandonnée
   const snap = persistence.load()
   if (snap && !session.active) {
     pendingSnapshot.value = snap

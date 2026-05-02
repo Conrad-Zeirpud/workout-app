@@ -26,7 +26,7 @@
           <p class="text-sm text-gray-500 mt-1">Choisis une catégorie</p>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 mb-5">
+        <div class="grid grid-cols-2 gap-3">
           <div v-for="cat in categories" :key="cat.id"
             @click="bot.goToCategory(cat.id)"
             class="card p-4 cursor-pointer active:scale-95 transition-transform"
@@ -34,20 +34,6 @@
             <div class="text-2xl mb-1">{{ cat.icon }}</div>
             <p class="text-sm font-semibold text-gray-900">{{ cat.label }}</p>
             <p class="text-xs text-gray-400 mt-0.5">{{ cat.count }} question(s)</p>
-          </div>
-        </div>
-
-        <!-- Coach IA placeholder -->
-        <div class="card p-4"
-          style="background:linear-gradient(135deg,#FEF3C7,#FDE68A); border:none">
-          <div class="flex items-start gap-3">
-            <div class="text-2xl">✨</div>
-            <div class="flex-1">
-              <p class="text-sm font-semibold text-gray-900">Coach IA personnalisé</p>
-              <p class="text-xs text-gray-600 mt-1">
-                Bientôt disponible : un coach qui génère des séances 100% adaptées à ton profil et tes objectifs.
-              </p>
-            </div>
           </div>
         </div>
       </div>

@@ -85,7 +85,10 @@ export const useWorkoutsStore = defineStore('workouts', () => {
         weight_kg: item.weight_kg,
         rest_seconds: item.rest_seconds,
         section: item.section || 'main',
-        order: i
+        order: i,
+        // Préserve les % de PR à la duplication
+        weight_pct: item.weight_pct ?? null,
+        pr_reference: item.pr_reference ?? null
       }))
       const { error: err2 } = await supabase.from('workout_items').insert(items)
       if (err2) throw err2
@@ -102,6 +105,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     await fetchWorkouts()
   }
 
+  // ⚠️ FIX BUG : on préserve maintenant weight_pct et pr_reference
   async function saveWorkoutItems(workoutId, items) {
     await supabase.from('workout_items').delete().eq('workout_id', workoutId)
     if (items.length === 0) return
@@ -110,10 +114,13 @@ export const useWorkoutsStore = defineStore('workouts', () => {
       exercise_id: item.exercise_id,
       sets: item.sets,
       reps: item.reps,
-      weight_kg: item.weight_kg || null,
+      weight_kg: item.weight_kg ?? null,
       rest_seconds: item.rest_seconds || 90,
       section: item.section || 'main',
-      order: i
+      order: i,
+      // Préservation explicite des colonnes liées aux programmes
+      weight_pct: item.weight_pct ?? null,
+      pr_reference: item.pr_reference ?? null
     }))
     const { error } = await supabase.from('workout_items').insert(rows)
     if (error) throw error
@@ -131,33 +138,20 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     return data
   }
 
-  // Met à jour les colonnes média d'un exercice
   async function updateExerciseMedia(exerciseId, mediaUpdate) {
     const auth = useAuthStore()
-    // Si l'exercice est is_default, on doit créer une copie perso pour cet utilisateur
-    // Mais pour simplifier, on autorise update direct si user_id matche
     const ex = exercises.value.find(e => e.id === exerciseId)
     if (!ex) throw new Error('Exercice introuvable')
-
-    // Cas 1 : exo perso de l'utilisateur → update direct
-    if (ex.user_id === auth.user.id) {
-      const { error } = await supabase
-        .from('exercises')
-        .update(mediaUpdate)
-        .eq('id', exerciseId)
-      if (error) throw error
-    } else {
-      // Cas 2 : exo par défaut → on update aussi directement
-      // (les RLS doivent autoriser update sur les is_default si on veut que tous les users partagent)
-      // En pratique, ici on fait un update qui ne fonctionnera que si la RLS le permet
-      const { error } = await supabase
-        .from('exercises')
-        .update(mediaUpdate)
-        .eq('id', exerciseId)
-      if (error) throw new Error('Pas autorisé à modifier cet exercice. Crée une copie perso.')
+    const { error } = await supabase
+      .from('exercises')
+      .update(mediaUpdate)
+      .eq('id', exerciseId)
+    if (error) {
+      if (ex.user_id !== auth.user.id) {
+        throw new Error('Pas autorisé à modifier cet exercice. Crée une copie perso.')
+      }
+      throw error
     }
-
-    // Mise à jour locale
     Object.assign(ex, mediaUpdate)
   }
 

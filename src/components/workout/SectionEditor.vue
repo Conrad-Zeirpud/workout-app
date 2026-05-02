@@ -25,6 +25,17 @@
             <span v-if="item.exercise?.equipment"> · {{ item.exercise.equipment }}</span>
           </p>
 
+          <!-- Indicateur % de PR (pour les séances de programme) -->
+          <div v-if="item.weight_pct" class="flex items-center gap-1.5 mb-2 px-2 py-1 rounded-lg"
+            style="background:#FEF3C7">
+            <span class="text-xs">🎯</span>
+            <p class="text-[11px] font-medium" style="color:#854F0B">
+              {{ Math.round(item.weight_pct * 100) }}% de ton 1RM
+              <span v-if="item.pr_reference">(PR : {{ item.pr_reference }}kg)</span>
+              <span v-else class="text-amber-600">— renseigne ton PR</span>
+            </p>
+          </div>
+
           <div class="grid gap-1.5" :class="gridFor(item)">
             <div>
               <label class="block text-xs text-gray-400 mb-0.5">Séries</label>
