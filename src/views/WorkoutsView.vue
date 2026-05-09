@@ -28,14 +28,16 @@
       </router-link>
 
       <!-- Skeleton pendant le chargement -->
-      <div v-if="workouts.loading" class="space-y-3">
-        <div v-for="n in 3" :key="n" class="card p-4 animate-pulse">
-          <div class="flex items-center gap-3">
-            <div class="w-11 h-11 bg-gray-200 rounded-xl" />
+      <div v-if="workouts.loading" class="space-y-2">
+        <div v-for="n in 3" :key="n" class="card p-3 animate-pulse">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-10 bg-gray-100 rounded" />
+            <div class="w-10 h-10 bg-gray-200 rounded-xl" />
             <div class="flex-1 space-y-2">
-              <div class="h-4 bg-gray-200 rounded w-2/3" />
-              <div class="h-3 bg-gray-100 rounded w-1/3" />
+              <div class="h-3 bg-gray-200 rounded w-2/3" />
+              <div class="h-2 bg-gray-100 rounded w-1/3" />
             </div>
+            <div class="w-10 h-10 bg-gray-100 rounded-lg" />
           </div>
         </div>
       </div>
@@ -49,48 +51,20 @@
         <router-link to="/workouts/new" class="btn-primary inline-block">Créer une séance</router-link>
       </div>
 
-      <!-- Liste des séances -->
+      <!-- Liste -->
       <div v-else>
-        <p v-if="workouts.workouts.length > 0" class="text-xs text-gray-400 mb-2">
-          💡 Maintiens un appui long sur une carte pour la réordonner
+        <p v-if="workouts.workouts.length > 0" class="text-xs text-gray-400 mb-2 px-1">
+          💡 Glisse vers la gauche pour plus d'actions · Maintiens ⋮⋮ pour réordonner
         </p>
-        <div ref="listRef" class="space-y-3">
-          <div v-for="w in localList" :key="w.id"
-            class="card p-4 flex items-center gap-3 drag-handle"
-            :data-id="w.id"
-            :style="`border-left: 3px solid ${getCat(w.category).color}`">
-            <div class="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-              :style="`background:${getCat(w.category).bg}`">
-              {{ getCat(w.category).icon }}
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-1.5">
-                <p class="font-semibold text-gray-900 truncate">{{ w.name }}</p>
-                <!-- Badge programme -->
-                <span v-if="w.program_subscription_id"
-                  class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
-                  style="background:#FEF3C7;color:#854F0B">
-                  S{{ w.program_week }}
-                </span>
-              </div>
-              <p class="text-xs text-gray-400 mt-0.5">
-                {{ w.workout_items?.length || 0 }} exercices
-                <span v-if="w.description"> · {{ w.description }}</span>
-              </p>
-            </div>
-            <div class="flex gap-2 flex-shrink-0">
-              <button @click.stop="duplicate(w)" :title="'Dupliquer'"
-                class="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 text-sm">📋</button>
-              <button @click.stop="confirmDelete(w)" :title="'Supprimer'"
-                class="w-9 h-9 bg-red-100 rounded-lg flex items-center justify-center text-red-500 text-sm">🗑</button>
-              <!-- ⚠️ FIX BUG : path corrigé /workouts/edit/:id -->
-              <router-link :to="`/workouts/edit/${w.id}`" @click.stop
-                class="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 text-sm">✏️</router-link>
-              <button @click.stop="startWorkout(w)" :title="'Lancer'"
-                class="w-9 h-9 rounded-lg flex items-center justify-center text-white text-sm"
-                style="background:var(--accent)">▶</button>
-            </div>
-          </div>
+        <div ref="listRef" class="space-y-2">
+          <WorkoutListItem v-for="w in localList" :key="w.id"
+            :workout="w"
+            :reset-signal="resetSignal[w.id] || 0"
+            @launch="startWorkout"
+            @edit="goToEdit"
+            @duplicate="duplicate"
+            @delete="confirmDelete"
+            @opened="onCardOpened" />
         </div>
       </div>
     </div>
@@ -169,10 +143,10 @@ import { useSessionStore } from '@/stores/session'
 import { useProgramsStore } from '@/stores/programs'
 import { useToast } from '@/composables/useToast'
 import { useSortable } from '@/composables/useSortable'
-import { getCategory } from '@/lib/categories'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 import ActiveProgramCard from '@/components/programs/ActiveProgramCard.vue'
+import WorkoutListItem from '@/components/workout/WorkoutListItem.vue'
 
 const workouts = useWorkoutsStore()
 const session = useSessionStore()
@@ -182,7 +156,10 @@ const { show } = useToast()
 const toDelete = ref(null)
 const listRef = ref(null)
 const localList = ref([])
-const getCat = getCategory
+
+// Reset signal pour fermer les cartes ouvertes
+// On incrémente le numéro associé à un workout.id pour le forcer à se fermer
+const resetSignal = ref({})
 
 // Shift modal state
 const showShiftModal = ref(false)
@@ -197,7 +174,9 @@ watch(() => workouts.workouts, (list) => {
   localList.value = [...list]
 }, { immediate: true })
 
+// SortableJS configuré pour ne déclencher que sur le handle
 useSortable(listRef, {
+  handle: '.drag-handle',     // ⚠️ Seul l'élément avec cette classe déclenche le drag
   onEnd: async (oldIdx, newIdx) => {
     const moved = localList.value.splice(oldIdx, 1)[0]
     localList.value.splice(newIdx, 0, moved)
@@ -209,14 +188,11 @@ useSortable(listRef, {
   }
 })
 
-// Statistiques de progression du programme actif
 const programStats = computed(() => {
   if (!programs.activeSubscription) return null
   const subId = programs.activeSubscription.id
   const programWorkouts = workouts.workouts.filter(w => w.program_subscription_id === subId)
   const total = programWorkouts.length
-  // On considère qu'une séance est "faite" si elle a une session liée (à approfondir si besoin)
-  // Pour l'instant on calcule la progression par semaine selon la date
   const totalWeeks = programs.activeSubscription.program?.duration_weeks || 0
   const startDate = new Date(programs.activeSubscription.started_at + 'T00:00:00')
   const today = new Date()
@@ -230,17 +206,36 @@ const programStats = computed(() => {
   }
 })
 
+// Quand une carte s'ouvre, on demande aux autres de se fermer
+function onCardOpened(openedId) {
+  for (const w of localList.value) {
+    if (w.id !== openedId) {
+      // Incrémente le signal pour ce workout : la carte se fermera
+      resetSignal.value[w.id] = (resetSignal.value[w.id] || 0) + 1
+    }
+  }
+}
+
 function startWorkout(w) {
   session.startSession(w)
   router.push(`/session/${w.id}`)
 }
 
-function confirmDelete(w) { toDelete.value = w }
+function goToEdit(w) {
+  router.push(`/workouts/edit/${w.id}`)
+}
+
+function confirmDelete(w) {
+  toDelete.value = w
+}
+
 async function doDelete() {
   try {
     await workouts.deleteWorkout(toDelete.value.id)
     show('Séance supprimée')
-  } catch { show('Erreur lors de la suppression', 'error') }
+  } catch {
+    show('Erreur lors de la suppression', 'error')
+  }
   toDelete.value = null
 }
 

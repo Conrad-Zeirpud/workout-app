@@ -8,35 +8,18 @@
       :exercise="previewExercise"
       @close="previewExercise = null" />
 
-    <SyncMediaModal
-      :visible="showSync"
-      :exercises="workouts.exercises"
-      @close="showSync = false"
-      @done="onSyncDone" />
-
     <div class="px-4 mt-4">
-      <!-- CTA création -->
-      <button @click="showForm = true"
-        class="w-full mb-3 py-4 rounded-2xl flex items-center justify-center gap-2 font-semibold text-white text-base active:scale-95 transition-transform"
+      <button @click="openCreate"
+        class="w-full mb-4 py-4 rounded-2xl flex items-center justify-center gap-2 font-semibold text-white text-base active:scale-95 transition-transform"
         style="background:linear-gradient(135deg,#1a1a2e,#2d2d5e); box-shadow:0 6px 20px rgba(26,26,46,0.25)">
         <span class="text-xl">➕</span>
-        Créer un exercice personnalisé
-      </button>
-
-      <!-- Sync button -->
-      <button @click="showSync = true"
-        class="w-full mb-4 py-3 rounded-xl flex items-center justify-center gap-2 font-medium text-sm active:scale-95 transition-transform"
-        style="background:#E6F1FB;color:#0C447C;border:1px solid #B8D9F1">
-        <span>🔄</span>
-        Synchroniser les médias
-        <span v-if="missingMediaCount > 0" class="ml-1 text-xs bg-blue-500 text-white rounded-full px-2 py-0.5">
-          {{ missingMediaCount }} sans visuel
-        </span>
+        {{ isAdmin ? 'Créer un exercice (perso ou public)' : 'Créer un exercice personnalisé' }}
       </button>
 
       <input v-model="search" placeholder="Rechercher un exercice…" class="input mb-3" />
 
-      <div class="flex gap-2 overflow-x-auto pb-2 mb-3">
+      <!-- Filtres section -->
+      <div class="flex gap-2 overflow-x-auto pb-2 mb-2">
         <button @click="filterSection = ''"
           class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
           :class="filterSection === '' ? 'text-white' : 'bg-gray-100 text-gray-600'"
@@ -58,6 +41,24 @@
         </button>
       </div>
 
+      <!-- Filtre origine (admin uniquement) -->
+      <div v-if="isAdmin" class="flex gap-2 overflow-x-auto pb-2 mb-3">
+        <button @click="filterOrigin = ''"
+          class="flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-medium"
+          :class="filterOrigin === '' ? 'text-white' : 'bg-gray-100 text-gray-600'"
+          :style="filterOrigin === '' ? 'background:#475569' : ''">Tous</button>
+        <button @click="filterOrigin = 'public'"
+          class="flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-medium"
+          :style="filterOrigin === 'public' ? 'background:#0891b2;color:white' : 'background:#cffafe;color:#0e7490'">
+          🌐 Publics
+        </button>
+        <button @click="filterOrigin = 'mine'"
+          class="flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-medium"
+          :style="filterOrigin === 'mine' ? 'background:#475569;color:white' : 'background:#f1f5f9;color:#475569'">
+          👤 Mes perso
+        </button>
+      </div>
+
       <p class="text-xs text-gray-400 mb-2">{{ filtered.length }} exercice(s)</p>
 
       <div v-if="workouts.loading" class="text-center py-12 text-gray-400 text-sm">Chargement…</div>
@@ -66,30 +67,69 @@
       </div>
       <div v-else class="space-y-2">
         <div v-for="ex in filtered" :key="ex.id" class="card p-3 flex items-center gap-3">
-          <div class="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-lg flex-shrink-0">💪</div>
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
+            :style="ex.media_type === 'video' ? 'background:#EAF3DE' : 'background:#F3F4F6'">
+            {{ ex.media_type === 'video' ? '🎥' : '💪' }}
+          </div>
           <div class="flex-1 min-w-0">
-            <p class="font-medium text-gray-900 truncate">{{ ex.name }}</p>
+            <div class="flex items-center gap-1.5">
+              <p class="font-medium text-gray-900 truncate text-sm">{{ ex.name }}</p>
+              <!-- Badge "public" pour les exos par défaut (visible uniquement par admin) -->
+              <span v-if="isAdmin && ex.is_default"
+                class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                style="background:#cffafe;color:#0e7490">
+                🌐
+              </span>
+            </div>
             <p class="text-xs text-gray-400 truncate">
               {{ ex.muscle_group }}<span v-if="ex.equipment"> · {{ ex.equipment }}</span>
             </p>
           </div>
-          <div class="flex flex-col gap-1 items-end flex-shrink-0">
+          <div class="flex items-center gap-1 flex-shrink-0">
             <PreviewButton :exercise="ex" @preview="previewExercise = ex" />
-            <button @click="openMediaEdit(ex)"
-              class="text-[10px] text-gray-400 underline">
-              {{ ex.media_url ? 'Modifier' : '+ Média' }}
-            </button>
+            <button v-if="canModify(ex)" @click="openEdit(ex)"
+              class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 text-xs"
+              aria-label="Modifier">✏️</button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Create exercise modal -->
+    <!-- Modale création / édition -->
     <div v-if="showForm" class="fixed inset-0 bg-black/40 z-50 flex items-end justify-center px-4 pb-8"
-      @click.self="showForm = false">
-      <div class="bg-white rounded-3xl p-6 w-full max-w-sm">
-        <h3 class="font-semibold text-gray-900 mb-4">Nouvel exercice</h3>
-        <div class="space-y-3 mb-5 max-h-[60vh] overflow-y-auto">
+      @click.self="closeForm">
+      <div class="bg-white rounded-3xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto">
+        <h3 class="font-semibold text-gray-900 mb-4">
+          {{ editingId ? 'Modifier l\'exercice' : 'Nouvel exercice' }}
+        </h3>
+
+        <!-- Toggle public (admin uniquement, en création) -->
+        <div v-if="isAdmin && !editingId" class="mb-4 p-3 rounded-xl flex items-center justify-between"
+          :style="form.isPublic ? 'background:#cffafe' : 'background:#f9fafb'">
+          <div>
+            <p class="text-sm font-semibold text-gray-900">
+              {{ form.isPublic ? '🌐 Exercice public' : '👤 Exercice perso' }}
+            </p>
+            <p class="text-[11px] text-gray-500 mt-0.5">
+              {{ form.isPublic ? 'Visible par tous les utilisateurs' : 'Visible uniquement par toi' }}
+            </p>
+          </div>
+          <button @click="form.isPublic = !form.isPublic"
+            class="relative w-11 h-6 rounded-full transition-colors flex-shrink-0"
+            :style="`background:${form.isPublic ? '#0891b2' : '#cbd5e1'}`">
+            <span class="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all"
+              :style="`left:${form.isPublic ? '1.375rem' : '0.125rem'}`" />
+          </button>
+        </div>
+
+        <!-- Bandeau infos pour exos publics en édition -->
+        <div v-if="editingId && form._isPublic"
+          class="mb-4 p-3 rounded-xl text-xs"
+          style="background:#cffafe;color:#0e7490">
+          🌐 Cet exercice est <strong>public</strong>. Tes modifications seront visibles par tous les utilisateurs.
+        </div>
+
+        <div class="space-y-3 mb-5">
           <input v-model="form.name" placeholder="Nom *" class="input" />
           <select v-model="form.muscle_group" class="input">
             <option value="">Groupe musculaire</option>
@@ -119,50 +159,37 @@
           </div>
           <textarea v-model="form.notes" placeholder="Notes (optionnel)" rows="2" class="input resize-none" />
         </div>
+
         <div class="flex gap-3">
-          <button @click="showForm = false" class="btn-ghost flex-1 text-sm py-2">Annuler</button>
-          <button @click="create" class="btn-primary flex-1 text-sm py-2">Créer</button>
+          <button @click="closeForm" class="btn-ghost flex-1 text-sm py-2">Annuler</button>
+          <button v-if="editingId" @click="askDelete"
+            class="bg-red-500 text-white rounded-xl py-2 px-3 text-sm font-medium">🗑</button>
+          <button @click="save" :disabled="saving"
+            class="btn-primary flex-1 text-sm py-2 disabled:opacity-40">
+            <span v-if="saving" class="animate-spin">⟳</span>
+            <span v-else>{{ editingId ? 'Enregistrer' : 'Créer' }}</span>
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- Media edit modal -->
-    <div v-if="mediaEditTarget" class="fixed inset-0 bg-black/40 z-50 flex items-end justify-center px-4 pb-8"
-      @click.self="closeMediaEdit">
+    <!-- Confirmation suppression -->
+    <div v-if="confirmDelete" class="fixed inset-0 bg-black/40 z-[60] flex items-end justify-center px-4 pb-8"
+      @click.self="confirmDelete = false">
       <div class="bg-white rounded-3xl p-6 w-full max-w-sm">
-        <h3 class="font-semibold text-gray-900 mb-1">Visuel pour "{{ mediaEditTarget.name }}"</h3>
-        <p class="text-xs text-gray-400 mb-4">URL d'un GIF, image ou vidéo YouTube</p>
-
-        <div class="space-y-3 mb-4">
-          <input v-model="mediaForm.url" placeholder="https://…" class="input text-sm" />
-
-          <button @click="searchSingle"
-            :disabled="searching"
-            class="w-full py-2 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium flex items-center justify-center gap-2">
-            <span v-if="searching" class="animate-spin">⟳</span>
-            🔍 Chercher sur ExerciseDB
-          </button>
-
-          <div v-if="searchResult" class="p-3 bg-gray-50 rounded-xl">
-            <p class="text-xs font-medium text-gray-700">Trouvé : {{ searchResult.name }}</p>
-            <img v-if="searchResult.gifUrl" :src="searchResult.gifUrl"
-              class="w-full h-32 object-contain rounded mt-2" />
-            <button @click="useSearchResult"
-              class="w-full mt-2 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium">
-              Utiliser ce visuel
-            </button>
-          </div>
-          <p v-else-if="searchAttempted" class="text-xs text-gray-400 text-center">
-            Aucun résultat trouvé
-          </p>
-        </div>
-
+        <h3 class="font-semibold text-gray-900 mb-1">Supprimer "{{ form.name }}" ?</h3>
+        <p class="text-sm text-gray-500 mb-5">
+          {{ form._isPublic
+            ? 'Cet exercice est public. Sa suppression le retirera pour TOUS les utilisateurs.'
+            : 'Cette action est irréversible.' }}
+        </p>
         <div class="flex gap-3">
-          <button @click="closeMediaEdit" class="btn-ghost flex-1 text-sm py-2">Annuler</button>
-          <button v-if="mediaEditTarget.media_url" @click="clearMedia"
-            class="text-red-500 text-sm font-medium px-3">Retirer</button>
-          <button @click="saveMedia"
-            class="btn-primary flex-1 text-sm py-2">Enregistrer</button>
+          <button @click="confirmDelete = false" class="btn-ghost flex-1 text-sm py-2">Annuler</button>
+          <button @click="doDelete" :disabled="deleting"
+            class="flex-1 bg-red-500 text-white rounded-xl py-2 text-sm font-medium disabled:opacity-40">
+            <span v-if="deleting" class="animate-spin">⟳</span>
+            <span v-else>Supprimer</span>
+          </button>
         </div>
       </div>
     </div>
@@ -172,51 +199,64 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useWorkoutsStore } from '@/stores/workouts'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
-import { searchExerciseDB, detectMediaType } from '@/lib/exerciseMedia'
-import { exerciseNameToQuery, SKIP_EXERCISES } from '@/lib/exerciseNameMap'
+import { useIsAdmin } from '@/composables/useIsAdmin'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 import ExercisePreviewOverlay from '@/components/ui/ExercisePreviewOverlay.vue'
 import PreviewButton from '@/components/ui/PreviewButton.vue'
-import SyncMediaModal from '@/components/ui/SyncMediaModal.vue'
 
 const workouts = useWorkoutsStore()
+const auth = useAuthStore()
+const { isAdmin } = useIsAdmin()
 const { show } = useToast()
+
 const search = ref('')
 const filterSection = ref('')
+const filterOrigin = ref('')   // '' | 'public' | 'mine' (admin only)
 const showForm = ref(false)
-const showSync = ref(false)
+const editingId = ref(null)
+const saving = ref(false)
 const previewExercise = ref(null)
+const confirmDelete = ref(false)
+const deleting = ref(false)
 
-const form = ref({
-  name: '', muscle_group: '', equipment: '',
-  unit: 'weight', applicable_sections: ['main'], notes: ''
-})
+const form = ref(blankForm())
 
-const mediaEditTarget = ref(null)
-const mediaForm = ref({ url: '' })
-const searching = ref(false)
-const searchResult = ref(null)
-const searchAttempted = ref(false)
+function blankForm() {
+  return {
+    name: '', muscle_group: '', equipment: '',
+    unit: 'weight', applicable_sections: ['main'], notes: '',
+    isPublic: false,
+    _isPublic: false  // pour l'affichage du bandeau en édition
+  }
+}
 
 const muscleGroups = ['Pectoraux','Dos','Épaules','Biceps','Triceps','Jambes','Fessiers','Abdominaux','Avant-bras','Full Body','Cardio','Mobilité']
 const equipmentList = ['Barre','Haltères','Poulie','Machine','Poids du corps','Kettlebell','Aucun']
 
-const filtered = computed(() =>
-  workouts.exercises.filter(e => {
-    const matchSearch = e.name.toLowerCase().includes(search.value.toLowerCase())
-    const sections = e.applicable_sections || ['main']
-    const matchSection = !filterSection.value || sections.includes(filterSection.value)
-    return matchSearch && matchSection
-  })
-)
+function canModify(ex) {
+  if (isAdmin.value) return true
+  return ex.user_id === auth.user?.id
+}
 
-const missingMediaCount = computed(() =>
-  workouts.exercises.filter(ex =>
-    !ex.media_url && !SKIP_EXERCISES.has(ex.name)
-  ).length
-)
+const filtered = computed(() => {
+  let list = workouts.exercises
+  if (isAdmin.value && filterOrigin.value === 'public') {
+    list = list.filter(e => e.is_default === true)
+  } else if (isAdmin.value && filterOrigin.value === 'mine') {
+    list = list.filter(e => e.user_id === auth.user?.id)
+  }
+  if (filterSection.value) {
+    list = list.filter(e => (e.applicable_sections || ['main']).includes(filterSection.value))
+  }
+  const q = search.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter(e => e.name.toLowerCase().includes(q))
+  }
+  return list
+})
 
 function sectionLabelLong(s) { return ({ warmup: '🔥 Warmup', main: '💪 Exos', wod: '🏁 WOD' }[s] || s) }
 function sectionBadgeStyle(s) {
@@ -235,76 +275,79 @@ function toggleSection(s) {
   if (arr.length === 0) arr.push('main')
 }
 
-async function create() {
-  if (!form.value.name.trim()) return show('Nom requis', 'error')
-  try {
-    await workouts.createExercise({ ...form.value })
-    showForm.value = false
-    form.value = { name: '', muscle_group: '', equipment: '', unit: 'weight', applicable_sections: ['main'], notes: '' }
-    show('Exercice créé ✓')
-  } catch { show('Erreur', 'error') }
+function openCreate() {
+  editingId.value = null
+  form.value = blankForm()
+  if (isAdmin.value) form.value.isPublic = true
+  showForm.value = true
 }
 
-function openMediaEdit(ex) {
-  mediaEditTarget.value = ex
-  mediaForm.value.url = ex.media_url || ''
-  searchResult.value = null
-  searchAttempted.value = false
-}
-
-function closeMediaEdit() {
-  mediaEditTarget.value = null
-  mediaForm.value.url = ''
-  searchResult.value = null
-  searchAttempted.value = false
-}
-
-async function searchSingle() {
-  if (!mediaEditTarget.value?.name) return
-  searching.value = true
-  searchAttempted.value = true
-  const query = exerciseNameToQuery(mediaEditTarget.value.name)
-  searchResult.value = await searchExerciseDB(query)
-  searching.value = false
-}
-
-function useSearchResult() {
-  if (searchResult.value?.gifUrl) {
-    mediaForm.value.url = searchResult.value.gifUrl
+function openEdit(ex) {
+  editingId.value = ex.id
+  form.value = {
+    name: ex.name || '',
+    muscle_group: ex.muscle_group || '',
+    equipment: ex.equipment || '',
+    unit: ex.unit || 'weight',
+    applicable_sections: ex.applicable_sections || ['main'],
+    notes: ex.notes || '',
+    isPublic: false,
+    _isPublic: ex.is_default === true
   }
+  showForm.value = true
 }
 
-async function saveMedia() {
-  if (!mediaEditTarget.value) return
-  const url = mediaForm.value.url.trim() || null
-  const mediaType = url ? detectMediaType(url) : null
+function closeForm() {
+  showForm.value = false
+  editingId.value = null
+  form.value = blankForm()
+}
+
+async function save() {
+  if (!form.value.name.trim()) {
+    show('Nom requis', 'error')
+    return
+  }
+  saving.value = true
   try {
-    await workouts.updateExerciseMedia(mediaEditTarget.value.id, {
-      media_url: url,
-      media_type: mediaType,
-      external_id: searchResult.value?.externalId || mediaEditTarget.value.external_id || null
-    })
-    show('Visuel enregistré ✓')
-    closeMediaEdit()
+    const payload = {
+      name: form.value.name.trim(),
+      muscle_group: form.value.muscle_group || null,
+      equipment: form.value.equipment || null,
+      unit: form.value.unit,
+      applicable_sections: form.value.applicable_sections,
+      notes: form.value.notes || null
+    }
+
+    if (editingId.value) {
+      await workouts.updateExercise(editingId.value, payload)
+      show('Exercice modifié ✓')
+    } else {
+      await workouts.createExercise(payload, { isPublic: form.value.isPublic })
+      show(form.value.isPublic ? 'Exercice public créé ✓' : 'Exercice créé ✓')
+    }
+    closeForm()
   } catch (e) {
     show(e.message || 'Erreur', 'error')
   }
+  saving.value = false
 }
 
-async function clearMedia() {
-  if (!mediaEditTarget.value) return
+function askDelete() {
+  confirmDelete.value = true
+}
+
+async function doDelete() {
+  deleting.value = true
   try {
-    await workouts.updateExerciseMedia(mediaEditTarget.value.id, {
-      media_url: null, media_type: null, external_id: null
-    })
-    show('Visuel retiré')
-    closeMediaEdit()
-  } catch { show('Erreur', 'error') }
-}
-
-async function onSyncDone(stats) {
-  show(`✓ ${stats.found} médias ajoutés`)
-  await workouts.fetchExercises()
+    await workouts.deleteExercise(editingId.value)
+    show('Exercice supprimé')
+    confirmDelete.value = false
+    closeForm()
+  } catch (e) {
+    show(e.message || 'Erreur lors de la suppression', 'error')
+  }
+  deleting.value = false
 }
 
 onMounted(() => workouts.fetchExercises())

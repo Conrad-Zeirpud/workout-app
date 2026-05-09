@@ -5,19 +5,26 @@ import Sortable from 'sortablejs'
  * Attach SortableJS to a DOM element.
  * @param {Ref<HTMLElement>} elRef - the container to make sortable
  * @param {Object} options
- * @param {Function} options.onEnd - callback(newOrderIndices, oldIndex, newIndex)
- * @param {string} [options.handle] - selector for drag handle (optional)
+ * @param {Function} options.onEnd - callback(oldIndex, newIndex)
+ * @param {string} [options.handle] - selector for drag handle (e.g. '.drag-handle')
+ *
+ * Configuration mobile-friendly :
+ * - Avec handle dédié : drag instantané sur le handle, scroll libre ailleurs
+ * - Sans handle : long-press de 200ms pour distinguer du scroll
+ * - forceFallback: false pour utiliser le HTML5 native qui respecte les CSS touch-action
  */
 export function useSortable(elRef, options = {}) {
   let instance = null
 
   function init() {
     if (!elRef.value) return
+    const hasHandle = !!options.handle
     instance = Sortable.create(elRef.value, {
       animation: 180,
-      delay: 150,            // long-press delay on touch
+      delay: hasHandle ? 0 : 200,
       delayOnTouchOnly: true,
-      touchStartThreshold: 5,
+      touchStartThreshold: hasHandle ? 0 : 5,
+      forceFallback: false,
       ghostClass: 'sortable-ghost',
       chosenClass: 'sortable-chosen',
       dragClass: 'sortable-drag',

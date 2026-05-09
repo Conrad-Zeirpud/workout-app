@@ -15,7 +15,9 @@ const routes = [
   { path: '/timer/run', name: 'timer-run', component: () => import('@/views/TimerRunnerView.vue') },
   { path: '/history', name: 'history', component: () => import('@/views/HistoryView.vue') },
   { path: '/exercises', name: 'exercises', component: () => import('@/views/ExercisesView.vue') },
-  { path: '/profile', name: 'profile', component: () => import('@/views/ProfileView.vue') }
+  { path: '/profile', name: 'profile', component: () => import('@/views/ProfileView.vue') },
+  // Admin
+  { path: '/admin/videos', name: 'admin-videos', component: () => import('@/views/AdminVideosView.vue') },
 ]
 
 const router = createRouter({

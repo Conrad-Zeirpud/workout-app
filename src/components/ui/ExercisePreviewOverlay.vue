@@ -12,35 +12,40 @@
         </button>
 
         <div class="bg-white rounded-3xl overflow-hidden shadow-2xl">
-          <div class="relative aspect-square bg-gray-100 flex items-center justify-center">
-            <iframe v-if="mediaType === 'youtube'"
-              :src="primaryUrl"
+          <div class="relative aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
+
+            <!-- Vidéo MP4/WebM en boucle (priorité 1) -->
+            <video v-if="mediaType === 'video' && mediaUrl && !mediaError"
+              ref="videoEl"
+              :src="mediaUrl"
+              autoplay
+              loop
+              muted
+              playsinline
+              preload="metadata"
+              class="w-full h-full object-contain"
+              @error="onMediaError" />
+
+            <!-- Image / GIF (priorité 2 - pour exos custom uploadés en image) -->
+            <img v-else-if="(mediaType === 'image' || mediaType === 'gif') && mediaUrl && !mediaError"
+              :src="mediaUrl"
+              :alt="exercise?.name"
+              class="w-full h-full object-contain"
+              @error="onMediaError" />
+
+            <!-- YouTube (priorité 3) -->
+            <iframe v-else-if="mediaType === 'youtube' && mediaUrl"
+              :src="youtubeEmbedUrl"
               class="w-full h-full"
               frameborder="0"
               allow="accelerometer; autoplay; encrypted-media; gyroscope"
               allowfullscreen />
 
-            <!-- Animated images : alternate between 2+ URLs -->
-            <template v-else-if="imageUrls.length > 0 && !mediaError">
-              <img v-for="(url, i) in imageUrls" :key="url"
-                :src="url"
-                :alt="exercise?.name"
-                class="absolute inset-0 w-full h-full object-contain transition-opacity duration-200"
-                :style="`opacity:${i === currentFrame ? 1 : 0}`"
-                @error="onMediaError" />
-
-              <!-- Hint label if multi-image -->
-              <div v-if="imageUrls.length > 1"
-                class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-[10px] font-medium text-white"
-                style="background:rgba(0,0,0,0.5)">
-                {{ currentFrame + 1 }} / {{ imageUrls.length }}
-              </div>
-            </template>
-
+            <!-- Fallback : pas de média ou erreur -->
             <div v-else class="text-center text-gray-400 px-6">
-              <div class="text-5xl mb-2">📷</div>
-              <p class="text-sm">Aucun visuel disponible</p>
-              <p class="text-xs text-gray-300 mt-1">Tu peux ajouter un GIF ou une vidéo via la fiche exercice</p>
+              <div class="text-5xl mb-2">{{ exerciseEmoji }}</div>
+              <p class="text-sm font-medium text-gray-500">{{ exercise?.name }}</p>
+              <p class="text-xs text-gray-300 mt-2">Aucune vidéo de démonstration</p>
             </div>
           </div>
 
@@ -60,8 +65,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue'
-import { youtubeToEmbed, parseMediaUrls } from '@/lib/exerciseMedia'
+import { ref, computed, watch } from 'vue'
 
 const props = defineProps({
   visible: Boolean,
@@ -69,57 +73,56 @@ const props = defineProps({
 })
 defineEmits(['close'])
 
+const videoEl = ref(null)
 const mediaError = ref(false)
-const currentFrame = ref(0)
-let animationInterval = null
 
 const mediaType = computed(() => props.exercise?.media_type || null)
+const mediaUrl = computed(() => props.exercise?.media_url || null)
 
-const imageUrls = computed(() => {
-  if (!props.exercise?.media_url) return []
-  if (mediaType.value === 'youtube') return []
-  return parseMediaUrls(props.exercise.media_url)
+// Pour YouTube
+const youtubeEmbedUrl = computed(() => {
+  const url = mediaUrl.value
+  if (!url) return null
+  // Extract video ID from various YouTube URL formats
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/)
+  return match ? `https://www.youtube.com/embed/${match[1]}?autoplay=1&loop=1&playlist=${match[1]}&controls=0&modestbranding=1` : url
 })
 
-const primaryUrl = computed(() => {
-  const url = props.exercise?.media_url
-  if (mediaType.value === 'youtube') {
-    return youtubeToEmbed(url) || url
-  }
-  return imageUrls.value[0] || null
+// Emoji représentatif si pas de média
+const exerciseEmoji = computed(() => {
+  const name = props.exercise?.name?.toLowerCase() || ''
+  if (name.includes('squat')) return '🦵'
+  if (name.includes('bench') || name.includes('couché')) return '🏋️'
+  if (name.includes('run') || name.includes('course')) return '🏃'
+  if (name.includes('row') || name.includes('rowing')) return '🚣'
+  if (name.includes('bike') || name.includes('vélo')) return '🚴'
+  if (name.includes('ski')) return '⛷️'
+  if (name.includes('jump') || name.includes('saut')) return '🤸'
+  if (name.includes('pull') || name.includes('tract')) return '💪'
+  if (name.includes('push') || name.includes('pomp')) return '👐'
+  if (name.includes('plank') || name.includes('planche')) return '🧘'
+  return '🏋️'
 })
 
 function onMediaError() {
   mediaError.value = true
 }
 
-function startAnimation() {
-  stopAnimation()
-  if (imageUrls.value.length > 1) {
-    animationInterval = setInterval(() => {
-      currentFrame.value = (currentFrame.value + 1) % imageUrls.value.length
-    }, 800)
-  }
-}
-
-function stopAnimation() {
-  if (animationInterval) {
-    clearInterval(animationInterval)
-    animationInterval = null
-  }
-}
-
 watch(() => props.visible, (v) => {
   if (v) {
     mediaError.value = false
-    currentFrame.value = 0
-    startAnimation()
+    // Forcer le rechargement de la vidéo si elle existe
+    setTimeout(() => {
+      if (videoEl.value) {
+        videoEl.value.load()
+        videoEl.value.play().catch(() => {})
+      }
+    }, 50)
   } else {
-    stopAnimation()
+    // Pause la vidéo quand on ferme
+    if (videoEl.value) videoEl.value.pause()
   }
 })
-
-onUnmounted(stopAnimation)
 </script>
 
 <style scoped>

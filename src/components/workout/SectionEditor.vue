@@ -10,11 +10,15 @@
 
     <div ref="listRef" class="px-2 pt-2 space-y-2 bg-white">
       <div v-for="item in items" :key="item._key"
-        class="p-2 bg-gray-50 rounded-xl flex items-start gap-2 drag-handle"
-        :data-key="item._key">
-        <div class="flex items-center pt-1 text-gray-300">
-          <span class="text-lg leading-none">⋮⋮</span>
+        class="p-2 bg-gray-50 rounded-xl flex items-start gap-2"
+        :data-key="item._key"
+        style="touch-action: pan-y">
+        <!-- Drag handle dédié à gauche : SEUL élément qui peut déclencher le drag -->
+        <div class="drag-handle flex items-center text-gray-300 flex-shrink-0 self-stretch px-1"
+          style="touch-action: none; cursor: grab">
+          <span class="text-base leading-none select-none">⋮⋮</span>
         </div>
+
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-2 mb-0.5">
             <p class="text-sm font-medium text-gray-900 truncate">{{ item.exercise?.name }}</p>
@@ -25,7 +29,7 @@
             <span v-if="item.exercise?.equipment"> · {{ item.exercise.equipment }}</span>
           </p>
 
-          <!-- Indicateur % de PR (pour les séances de programme) -->
+          <!-- Indicateur % de PR -->
           <div v-if="item.weight_pct" class="flex items-center gap-1.5 mb-2 px-2 py-1 rounded-lg"
             style="background:#FEF3C7">
             <span class="text-xs">🎯</span>
@@ -60,7 +64,7 @@
           </div>
         </div>
         <button @click.stop="$emit('remove', item)"
-          class="text-gray-300 hover:text-red-400 text-base leading-none pt-0.5 px-1">×</button>
+          class="text-gray-300 hover:text-red-400 text-base leading-none pt-0.5 px-1 self-start">×</button>
       </div>
     </div>
 
@@ -97,6 +101,7 @@ const emit = defineEmits(['add', 'remove', 'reorder', 'preview'])
 const listRef = ref(null)
 
 useSortable(listRef, {
+  handle: '.drag-handle',
   onEnd: (oldIdx, newIdx) => {
     emit('reorder', { oldIdx, newIdx })
   }

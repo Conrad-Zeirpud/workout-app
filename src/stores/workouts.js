@@ -86,7 +86,6 @@ export const useWorkoutsStore = defineStore('workouts', () => {
         rest_seconds: item.rest_seconds,
         section: item.section || 'main',
         order: i,
-        // Préserve les % de PR à la duplication
         weight_pct: item.weight_pct ?? null,
         pr_reference: item.pr_reference ?? null
       }))
@@ -105,7 +104,6 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     await fetchWorkouts()
   }
 
-  // ⚠️ FIX BUG : on préserve maintenant weight_pct et pr_reference
   async function saveWorkoutItems(workoutId, items) {
     await supabase.from('workout_items').delete().eq('workout_id', workoutId)
     if (items.length === 0) return
@@ -118,7 +116,6 @@ export const useWorkoutsStore = defineStore('workouts', () => {
       rest_seconds: item.rest_seconds || 90,
       section: item.section || 'main',
       order: i,
-      // Préservation explicite des colonnes liées aux programmes
       weight_pct: item.weight_pct ?? null,
       pr_reference: item.pr_reference ?? null
     }))
@@ -126,16 +123,56 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     if (error) throw error
   }
 
-  async function createExercise(exercise) {
+  /**
+   * Crée un exercice. Si options.isPublic = true (admin uniquement),
+   * l'exo est is_default = true et donc visible par TOUS les utilisateurs.
+   */
+  async function createExercise(exercise, options = {}) {
     const auth = useAuthStore()
+    const payload = { ...exercise }
+
+    if (options.isPublic) {
+      payload.is_default = true
+      payload.user_id = null
+    } else {
+      payload.user_id = auth.user.id
+      payload.is_default = false
+    }
+
     const { data, error } = await supabase
       .from('exercises')
-      .insert({ ...exercise, user_id: auth.user.id })
+      .insert(payload)
       .select()
       .single()
     if (error) throw error
     exercises.value.push(data)
     return data
+  }
+
+  /**
+   * Met à jour un exercice. Pour les exos par défaut (is_default = true),
+   * nécessite la policy admin (configurée via le SQL du Patch S).
+   */
+  async function updateExercise(id, updates) {
+    const { data, error } = await supabase
+      .from('exercises')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    const idx = exercises.value.findIndex(e => e.id === id)
+    if (idx >= 0) exercises.value[idx] = data
+    return data
+  }
+
+  /**
+   * Supprime un exercice. Pour les exos par défaut, nécessite la policy admin.
+   */
+  async function deleteExercise(id) {
+    const { error } = await supabase.from('exercises').delete().eq('id', id)
+    if (error) throw error
+    exercises.value = exercises.value.filter(e => e.id !== id)
   }
 
   async function updateExerciseMedia(exerciseId, mediaUpdate) {
@@ -147,7 +184,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
       .update(mediaUpdate)
       .eq('id', exerciseId)
     if (error) {
-      if (ex.user_id !== auth.user.id) {
+      if (ex.user_id !== auth.user.id && !ex.is_default) {
         throw new Error('Pas autorisé à modifier cet exercice. Crée une copie perso.')
       }
       throw error
@@ -159,7 +196,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     workouts, exercises, loading,
     fetchWorkouts, fetchExercises,
     createWorkout, updateWorkout, deleteWorkout, duplicateWorkout, reorderWorkouts,
-    saveWorkoutItems, createExercise,
+    saveWorkoutItems, createExercise, updateExercise, deleteExercise,
     updateExerciseMedia
   }
 })

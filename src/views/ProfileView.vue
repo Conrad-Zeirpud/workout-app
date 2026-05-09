@@ -50,6 +50,18 @@
           </div>
           <span class="text-gray-300">›</span>
         </router-link>
+
+        <!-- Bloc admin (visible seulement si VITE_ADMIN_EMAIL match) -->
+        <router-link v-if="isAdmin" to="/admin/videos"
+          class="card p-4 flex items-center gap-3"
+          style="background:linear-gradient(135deg,#FEF3C7,#FDE68A); border:none">
+          <span class="text-2xl">🎬</span>
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-gray-900">Admin · Vidéos d'exercices</p>
+            <p class="text-xs text-amber-700">Gérer le catalogue de démonstrations</p>
+          </div>
+          <span class="text-amber-700">›</span>
+        </router-link>
       </div>
 
       <!-- Activité hebdo -->
@@ -123,7 +135,7 @@
         class="w-full card p-4 text-red-500 text-sm font-medium text-center">
         Se déconnecter
       </button>
-      <p class="text-center text-xs text-gray-300 pb-2">WorkoutApp v0.3.0</p>
+      <p class="text-center text-xs text-gray-300 pb-2">WorkoutApp v0.5.0</p>
     </div>
 
     <!-- Confirm logout -->
@@ -147,6 +159,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useStatsStore } from '@/stores/stats'
 import { useSettings } from '@/composables/useSettings'
+import { useIsAdmin } from '@/composables/useIsAdmin'
 import WeeklyBarChart from '@/components/stats/WeeklyBarChart.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 
@@ -154,48 +167,37 @@ const auth = useAuthStore()
 const stats = useStatsStore()
 const router = useRouter()
 const { settings, save: saveSettings } = useSettings()
+const { isAdmin } = useIsAdmin()
 const confirmLogout = ref(false)
 
 const emojis = ['🏋️','💪','🤸','🦾','🧗','🚴','🏊','⚡']
 const avatarEmoji = computed(() => {
-  const i = (auth.user?.email?.charCodeAt(0) || 0) % emojis.length
-  return emojis[i]
+  const email = auth.user?.email || ''
+  let hash = 0
+  for (let i = 0; i < email.length; i++) hash = (hash * 31 + email.charCodeAt(i)) | 0
+  return emojis[Math.abs(hash) % emojis.length]
 })
 
 const memberSince = computed(() => {
-  const d = auth.user?.created_at
-  if (!d) return ''
-  return new Date(d).toLocaleDateString('fr', { month: 'long', year: 'numeric' })
+  const d = auth.user?.created_at ? new Date(auth.user.created_at) : null
+  return d ? d.toLocaleDateString('fr', { month: 'long', year: 'numeric' }) : '—'
 })
 
 const totalHours = computed(() => {
-  const sec = stats.sessions.reduce((a, s) => a + (s.duration_seconds || 0), 0)
-  return Math.round(sec / 3600)
+  const totalSec = stats.sessions.reduce((sum, s) => sum + (s.duration_seconds || 0), 0)
+  return Math.round(totalSec / 3600)
 })
 
-const totalSets = computed(() =>
-  stats.sessions.reduce((a, s) => a + (s.session_sets?.length || 0), 0)
-)
-
-const muscleRanking = computed(() => {
-  const map = {}
-  stats.sessions.forEach(s => {
-    s.session_sets?.forEach(set => {
-      const g = set.exercise?.muscle_group || 'Autre'
-      map[g] = (map[g] || 0) + 1
-    })
-  })
-  return Object.entries(map)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
+const totalSets = computed(() => {
+  return stats.sessions.reduce((sum, s) => sum + (s.session_sets?.length || 0), 0)
 })
 
 const weeklyData = computed(() => {
   const weeks = []
   const now = new Date()
-  for (let w = 6; w >= 0; w--) {
+  for (let i = 6; i >= 0; i--) {
     const start = new Date(now)
-    start.setDate(now.getDate() - now.getDay() - w * 7 + 1)
+    start.setDate(now.getDate() - now.getDay() - i * 7)
     start.setHours(0, 0, 0, 0)
     const end = new Date(start)
     end.setDate(start.getDate() + 7)
@@ -203,10 +205,22 @@ const weeklyData = computed(() => {
       const d = new Date(s.started_at)
       return d >= start && d < end
     }).length
-    const label = start.toLocaleDateString('fr', { day: '2-digit', month: '2-digit' })
-    weeks.push({ label, count })
+    weeks.push({ label: `S${i === 0 ? 'em' : -i}`, count })
   }
   return weeks
+})
+
+const muscleRanking = computed(() => {
+  const counts = {}
+  for (const session of stats.sessions) {
+    for (const set of session.session_sets || []) {
+      const m = set.exercise?.muscle_group
+      if (m) counts[m] = (counts[m] || 0) + 1
+    }
+  }
+  return Object.entries(counts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
 })
 
 async function logout() {
@@ -216,6 +230,5 @@ async function logout() {
 
 onMounted(async () => {
   await stats.fetchSessions(100)
-  await stats.fetchPRs()
 })
 </script>
